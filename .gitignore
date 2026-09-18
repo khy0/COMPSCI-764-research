@@ -1,0 +1,25 @@
+# Raw dataset — do not commit, download instructions in data/kvasir-seg/README.md
+data/kvasir-seg/*
+!data/kvasir-seg/.gitkeep
+!data/kvasir-seg/README.md
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Experiment artifacts
+checkpoints/
+*.pt
+*.pth
+wandb/
+*.log
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/

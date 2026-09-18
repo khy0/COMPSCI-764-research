@@ -1,0 +1,38 @@
+# SAM 3 zero-shot configuration — Promptable Visual Segmentation (PVS) mode only.
+# No fine-tuning, no training. Frozen weights (planning doc, §1.1/§1.3).
+
+model:
+  name: sam3
+  repo: facebookresearch/sam3
+  checkpoint: null                # TODO: local path once gated HF access is granted
+  mode: pvs                        # PVS = point/box/mask prompting, NOT the PCS text mode
+
+prompts:
+  # Each strategy is run over the full test set independently.
+  # Interior-point sampling uses max distance-transform point, not centroid
+  # (crescent-shaped polyps can have a centroid outside the mask — planning doc §1.4).
+  seed: 42
+  strategies:
+    - id: box-gt
+      type: box
+      jitter_pct: 0.0
+      note: "Tight GT bbox — oracle upper bound, comparable to Mansoori et al."
+    - id: box-j10
+      type: box
+      jitter_pct: 0.10
+    - id: box-j20
+      type: box
+      jitter_pct: 0.20
+    - id: pt-1
+      type: point
+      n_points: 1
+      sampling: max_distance_transform
+    - id: pt-3
+      type: point
+      n_points: 3
+      sampling: random_interior
+
+inference:
+  batch_size: 1
+  precision: fp16
+  test_split_file: data/splits/test.txt   # identical test set used by the U-Net arm

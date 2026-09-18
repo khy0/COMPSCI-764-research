@@ -1,0 +1,37 @@
+# Dataset and split configuration.
+# The split is generated ONCE from this config and then committed as index files
+# under data/splits/ — this file documents how they were made, it does not
+# regenerate them on every run (planning doc, P1).
+
+dataset:
+  name: kvasir-seg
+  path: data/kvasir-seg/
+  n_images_total: 1000
+  seed: 42                     # single seed governs the entire split — do not change
+
+splits:
+  # Held out ONCE, never touched during U-Net training/validation (P1).
+  test:
+    n_images: 200
+    file: data/splits/test.txt
+  val:
+    n_images: 100
+    file: data/splits/val.txt
+  train_pool:
+    n_images: 700
+    file: data/splits/train_pool.txt
+
+nested_subsets:
+  # Nested, not independently sampled (P2): train_10 ⊂ train_25 ⊂ train_50 ⊂ train_100.
+  - fraction: 0.10
+    n_images: 70
+    file: data/splits/train_10.txt
+  - fraction: 0.25
+    n_images: 175
+    file: data/splits/train_25.txt
+  - fraction: 0.50
+    n_images: 350
+    file: data/splits/train_50.txt
+  - fraction: 1.00
+    n_images: 700
+    file: data/splits/train_100.txt

@@ -1,0 +1,39 @@
+# Shared evaluation configuration, consumed by src/evaluate.py for BOTH arms.
+# One config, one implementation — do not fork per-arm (planning doc, §2).
+
+metrics:
+  - dice
+  - iou
+  - boundary_iou
+  - hd95
+  - precision
+  - recall
+
+boundary_iou:
+  dilation_px: null              # TODO (decisions.md + Methodology checklist item)
+
+hd95:
+  percentile: 95
+
+statistics:
+  bootstrap_resamples: 10000
+  ci: 0.95
+  paired_test: wilcoxon           # paired over test images — same images score both arms
+  multiple_comparisons: null      # TODO: "bonferroni" or "exploratory" — decide Week 4
+
+stratification:
+  polyp_size_pct:                 # mask area as % of image
+    small: [0, 5]
+    medium: [5, 15]
+    large: [15, 100]
+  boundary_contrast: mean_gradient_in_contour_band   # cheap proxy, see planning doc §3.3
+
+compute_profiling:
+  track_latency: true
+  track_memory: true
+  track_params: true
+  same_hardware_required: true    # both arms MUST be profiled on the same machine
+
+output:
+  per_image_csv: results/per_image_results.csv   # single source of truth — all
+                                                    # aggregate stats derive from this

@@ -1,0 +1,42 @@
+# U-Net baseline configuration — deliberately vanilla (planning doc, §1.5).
+# Shared across all four training brackets: only `bracket` and `seed` change
+# between runs (P3 — matched training budget).
+
+model:
+  name: unet
+  depth: 4                      # 4 down / 4 up blocks, skip connections
+  base_channels: 32              # TODO (decisions.md): confirm 32 vs. 64
+  pretrained: false               # from scratch — essential to the RQ, do not change
+
+input:
+  resize: [256, 256]              # predictions upsampled back to original resolution
+                                    # before scoring, so both arms are scored in the
+                                    # same space
+
+training:
+  loss: dice_bce
+  optimizer: adam
+  lr: 0.001
+  lr_schedule: cosine             # or "plateau" — pick one and keep it fixed across brackets
+  budget_mode: max_iterations     # TODO (decisions.md): confirm epochs vs. iterations
+  max_iterations: null            # TODO: set once decided
+  early_stopping_metric: val_dice
+  patience: null                  # TODO: set once decided
+  seeds: [0, 1, 2]                # 3 seeds per bracket -> 12 runs total
+
+augmentation:
+  # Identical across all brackets (P3) — do not vary by bracket.
+  flip: true
+  rotation: true
+  scale_jitter: true
+  color_jitter: true
+
+brackets:
+  - name: "10pct"
+    split_file: data/splits/train_10.txt
+  - name: "25pct"
+    split_file: data/splits/train_25.txt
+  - name: "50pct"
+    split_file: data/splits/train_50.txt
+  - name: "100pct"
+    split_file: data/splits/train_100.txt
