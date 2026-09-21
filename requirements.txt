@@ -1,22 +1,53 @@
-# Placeholder — NOT yet pinned to working versions.
-# SAM 3's stack is brittle (CUDA / PyTorch / flash-attention build compatibility) —
-# confirm exact versions against the official facebookresearch/sam3 repo instructions
-# in Week 1 before relying on this file. See risk register in the planning document.
+# Verified in Week 1 (2026-09) by actually importing sam3 in a clean venv and
+# resolving every ModuleNotFoundError one at a time — this is not a guess.
+# NOT yet pinned to exact versions (that's still a TODO); this is the confirmed
+# *set* of packages needed, in install order, with why each one is here.
 
-# --- core ---
-torch                  # TODO: pin to the exact version facebookresearch/sam3 requires
+# --- core (SAM 3 needs plain PyPI torch; no CUDA build reachable from campus/
+# sandboxed networks that block download.pytorch.org — see decisions.md) ---
+torch
 torchvision
 
-# --- SAM 3 ---
-# facebookresearch/sam3  # installed from source per official repo instructions, not PyPI
+# --- SAM 3 (installed from source, not PyPI: pip install
+# git+https://github.com/facebookresearch/sam3.git) ---
+# facebookresearch/sam3's own pyproject.toml only declares timm, numpy<2, tqdm,
+# ftfy, regex, iopath, typing_extensions, huggingface_hub as base deps — but
+# `import sam3` transitively imports its sam3/train/data/ submodule, which
+# needs einops and pycocotools too, and neither is in the base install_requires
+# (they're only listed under sam3's own "notebooks"/"dev" extras). Install them
+# explicitly or `import sam3` crashes with ModuleNotFoundError even after a
+# clean `pip install git+...`.
+setuptools<81          # sam3/model_builder.py does `import pkg_resources`, removed from
+                        # setuptools>=81; sam3 doesn't declare setuptools as a runtime dep.
+psutil                 # imported by sam3/model/sam3_video_predictor.py, not declared upstream.
+# triton is intentionally NOT listed: Linux/CUDA-only, and unavailable on macOS.
+# See the local sam3 patch in decisions.md; on a CUDA box pip pulls it in via torch.
+timm
+ftfy
+regex
+iopath
+typing_extensions
+huggingface_hub
+einops
+pycocotools
+scikit-image           # sam3/model/sam1_task_predictor.py uses it for mask post-processing;
+                        # without it sam3 skips that step with a warning (only in sam3's
+                        # "notebooks"/"dev" extras upstream, not the base install).
+numpy<2                # sam3 pins numpy<2; keep this ABOVE any numpy>=2 pull-in
+                        # from opencv-python/opencv-contrib-python below, or pip
+                        # will report (non-fatal) resolver conflicts.
+opencv-python-headless  # sam3's own example notebooks use plain opencv-python;
+                        # -headless avoids pulling in GUI/Qt deps we don't need
+                        # for a script-only pipeline.
 
 # --- U-Net / training ---
 segmentation-models-pytorch   # only if not hand-rolling the U-Net — see decisions.md
 albumentations
 
 # --- metrics ---
-scipy
-monai                  # HD95 / surface distance metrics
+scipy                   # dice/iou/boundary_iou/hd95 in src/metrics.py use only
+                         # scipy.ndimage + numpy directly — monai turned out to
+                         # be unnecessary and was dropped (decisions.md).
 
 # --- analysis ---
 numpy
