@@ -24,3 +24,6 @@ wandb/
 .DS_Store
 .vscode/
 .idea/
+
+# Results
+results/sam3_preds/*
