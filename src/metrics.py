@@ -16,13 +16,13 @@ evaluate.py can be pointed at the agreed value without editing this file.
 from __future__ import annotations
 
 import numpy as np
-from scipy.ndimage import binary_dilation, distance_transform_edt
+from scipy.ndimage import binary_dilation, distance_transform_edt, binary_erosion
 
 # Placeholder only — see configs/eval.yaml boundary_iou.dilation_px (TODO) and
 # decisions.md item 2. Do not treat this as the agreed value.
 DEFAULT_DILATION_PX = 2
 
-EPS = 1e-7
+EPS = 0 #1e-7
 
 
 def _as_bool(mask: np.ndarray) -> np.ndarray:
@@ -38,6 +38,7 @@ def dice(pred: np.ndarray, gt: np.ndarray) -> float:
     return float(2 * intersection / (p.sum() + g.sum() + EPS))
 
 
+
 def iou(pred: np.ndarray, gt: np.ndarray) -> float:
     """Intersection-over-Union. 1.0 if both masks are empty."""
     p, g = _as_bool(pred), _as_bool(gt)
@@ -46,6 +47,7 @@ def iou(pred: np.ndarray, gt: np.ndarray) -> float:
     if union == 0:
         return 1.0
     return float(intersection / (union + EPS))
+
 
 
 def _mask_boundary(mask: np.ndarray, dilation_px: int) -> np.ndarray:
@@ -73,6 +75,11 @@ def boundary_iou(
         return 1.0
     return float(intersection / (union + EPS))
 
+def _mask_edge(mask: np.ndarray) -> np.ndarray:
+    """Boundary/contour pixels only: mask minus its 1px erosion."""
+    m = _as_bool(mask)
+    eroded = binary_erosion(m, structure=np.ones((3, 3), dtype=bool), border_value=0)
+    return m & ~eroded
 
 def hd95(pred: np.ndarray, gt: np.ndarray, percentile: float = 95.0) -> float:
     """95th-percentile symmetric Hausdorff distance, in pixels.
@@ -95,11 +102,17 @@ def hd95(pred: np.ndarray, gt: np.ndarray, percentile: float = 95.0) -> float:
     # (not just contour pixels) is equivalent for HD95 purposes here since the
     # nearest-point distance for an interior pixel of `p` to `g` is bounded by
     # its distance via `p`'s own boundary — standard practice (e.g. MONAI).
+    p_edge, g_edge = _mask_edge(p), _mask_edge(g)
+
+
     dt_to_g = distance_transform_edt(~g)
     dt_to_p = distance_transform_edt(~p)
 
-    d_p_to_g = dt_to_g[p]
-    d_g_to_p = dt_to_p[g]
+    """d_p_to_g = dt_to_g[p]
+    d_g_to_p = dt_to_p[g]"""
+    d_p_to_g = dt_to_g[p_edge]
+    d_g_to_p = dt_to_p[g_edge]
+
 
     all_d = np.concatenate([d_p_to_g, d_g_to_p])
     return float(np.percentile(all_d, percentile))
