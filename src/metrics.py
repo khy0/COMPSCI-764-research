@@ -7,22 +7,61 @@ Implements exactly the metric set in configs/eval.yaml: dice, iou, boundary_iou,
 hd95, precision, recall. All functions take a single (pred, gt) pair of 2D
 binary {0,1} numpy arrays of identical shape and return a Python float.
 
-boundary_iou.dilation_px is currently `null` in configs/eval.yaml (open item in
-decisions.md) — DEFAULT_DILATION_PX below is a placeholder used only until that
-decision is logged; boundary_iou() always accepts an explicit override so
-evaluate.py can be pointed at the agreed value without editing this file.
+boundary_iou's dilation width is resolved PER IMAGE as a ratio of that image's
+own diagonal (see DEFAULT_DILATION_RATIO below), not a single fixed pixel count
+— closed 2026-09-30 in decisions.md. Kvasir-SEG images range from 332x487 to
+1920x1072 (diagonal ratio ~3.7x), so a fixed pixel width would be a razor-thin
+boundary band on small images and comically strict on large ones. A manual
+`dilation_px` override is still accepted by boundary_iou()/compute_all() for a
+one-off/debug run, but the default is the ratio-based method.
 """
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
-from scipy.ndimage import binary_dilation, distance_transform_edt, binary_erosion
+from scipy.ndimage import binary_dilation, binary_erosion, distance_transform_edt
 
-# Placeholder only — see configs/eval.yaml boundary_iou.dilation_px (TODO) and
-# decisions.md item 2. Do not treat this as the agreed value.
-DEFAULT_DILATION_PX = 2
+# Canonical value from Cheng, Girshick, Dollár & Kirillov, "Boundary IoU:
+# Improving Object-Centric Image Segmentation Evaluation" (CVPR 2021), and its
+# official implementation (github.com/bowenc0221/boundary-iou-api): dilation
+# width = round(dilation_ratio * image_diagonal), minimum 1px. This is the
+# paper's own default, not a value this project invented — see decisions.md,
+# 2026-09-30 entry, for the worked example at Kvasir-SEG's resolution extremes
+# (12px at 332x487, 44px at 1920x1072).
+DEFAULT_DILATION_RATIO = 0.02
 
-EPS = 0 #1e-7
+
+def resolve_dilation_px(
+    mask_shape: tuple[int, int],
+    dilation_px: int | None = None,
+    dilation_ratio: float = DEFAULT_DILATION_RATIO,
+) -> int:
+    """Pixel width of the boundary band for an image of shape (H, W).
+
+    If `dilation_px` is given explicitly, it's used as-is (manual override —
+    e.g. for a one-off debug run at a fixed width). Otherwise the width is
+    computed from `dilation_ratio` * this image's own diagonal, per the
+    official Boundary IoU implementation, so images of very different
+    resolutions (as in Kvasir-SEG) get comparably-sized boundary bands
+    relative to their own extent, rather than one band size that's too tight
+    for large images and too loose for small ones.
+    """
+    if dilation_px is not None:
+        return dilation_px
+    h, w = mask_shape
+    img_diag = math.sqrt(h ** 2 + w ** 2)
+    return max(1, round(dilation_ratio * img_diag))
+
+# Reviewed and approved 2026-09-30 (decisions.md): every zero-denominator case
+# below is already caught by an explicit branch before the division is
+# reached, so a smoothing epsilon is unnecessary here (unlike e.g. a soft-Dice
+# training loss on continuous values, where it would matter). Confirmed safe
+# by exhaustive testing across empty/disjoint/identical/random-overlap mask
+# pairs. Kept as a named constant rather than removed outright so it's easy to
+# reintroduce with a comment if a future metric variant needs it.
+EPS = 0
 
 
 def _as_bool(mask: np.ndarray) -> np.ndarray:
@@ -38,7 +77,6 @@ def dice(pred: np.ndarray, gt: np.ndarray) -> float:
     return float(2 * intersection / (p.sum() + g.sum() + EPS))
 
 
-
 def iou(pred: np.ndarray, gt: np.ndarray) -> float:
     """Intersection-over-Union. 1.0 if both masks are empty."""
     p, g = _as_bool(pred), _as_bool(gt)
@@ -47,7 +85,6 @@ def iou(pred: np.ndarray, gt: np.ndarray) -> float:
     if union == 0:
         return 1.0
     return float(intersection / (union + EPS))
-
 
 
 def _mask_boundary(mask: np.ndarray, dilation_px: int) -> np.ndarray:
@@ -60,26 +97,34 @@ def _mask_boundary(mask: np.ndarray, dilation_px: int) -> np.ndarray:
 
 
 def boundary_iou(
-    pred: np.ndarray, gt: np.ndarray, dilation_px: int = DEFAULT_DILATION_PX
+    pred: np.ndarray,
+    gt: np.ndarray,
+    dilation_px: int | None = None,
+    dilation_ratio: float = DEFAULT_DILATION_RATIO,
 ) -> float:
-    """Boundary IoU (Cheng et al., 2021): IoU restricted to a boundary band of
-    width `dilation_px` around each mask's contour."""
+    """Boundary IoU (Cheng et al., 2021): IoU restricted to a boundary band
+    around each mask's contour. Band width is resolved per-image from
+    `dilation_ratio` (default: the paper's own 2% of the image diagonal) unless
+    `dilation_px` is given explicitly — see resolve_dilation_px()."""
     p, g = _as_bool(pred), _as_bool(gt)
     if p.sum() == 0 and g.sum() == 0:
         return 1.0
-    p_boundary = _mask_boundary(p, dilation_px) & p
-    g_boundary = _mask_boundary(g, dilation_px) & g
+    resolved_px = resolve_dilation_px(p.shape, dilation_px, dilation_ratio)
+    p_boundary = _mask_boundary(p, resolved_px) & p
+    g_boundary = _mask_boundary(g, resolved_px) & g
     intersection = np.logical_and(p_boundary, g_boundary).sum()
     union = np.logical_or(p_boundary, g_boundary).sum()
     if union == 0:
         return 1.0
     return float(intersection / (union + EPS))
 
+
 def _mask_edge(mask: np.ndarray) -> np.ndarray:
     """Boundary/contour pixels only: mask minus its 1px erosion."""
     m = _as_bool(mask)
     eroded = binary_erosion(m, structure=np.ones((3, 3), dtype=bool), border_value=0)
     return m & ~eroded
+
 
 def hd95(pred: np.ndarray, gt: np.ndarray, percentile: float = 95.0) -> float:
     """95th-percentile symmetric Hausdorff distance, in pixels.
@@ -90,6 +135,16 @@ def hd95(pred: np.ndarray, gt: np.ndarray, percentile: float = 95.0) -> float:
       boundary) — evaluate.py must decide how to aggregate this (exclude vs. cap;
       see decisions.md / Methodology checklist — HD95 handling of empty masks is
       NOT yet an open item there and should be added before Week 4 aggregation).
+
+    Fixed 2026-09-30 (decisions.md): distances are computed from CONTOUR pixels
+    only (`_mask_edge`), not all foreground pixels. An earlier version used all
+    foreground pixels, which is wrong: for any pixel of `p` that lies inside
+    `g` (most of the interior, when the masks overlap reasonably well), its
+    distance to `g` is exactly 0 — mixing those near-zero interior distances
+    into the array before taking the 95th percentile systematically understates
+    HD95 (worse for larger/blobbier masks). This matches the standard
+    surface-distance definition (e.g. MONAI's compute_hausdorff_distance also
+    restricts to boundary/surface points first).
     """
     p, g = _as_bool(pred), _as_bool(gt)
     if p.sum() == 0 and g.sum() == 0:
@@ -97,22 +152,13 @@ def hd95(pred: np.ndarray, gt: np.ndarray, percentile: float = 95.0) -> float:
     if p.sum() == 0 or g.sum() == 0:
         return float("inf")
 
-    # Directed distances: for every foreground pixel of one mask, distance to
-    # the nearest foreground pixel of the other. Using all foreground pixels
-    # (not just contour pixels) is equivalent for HD95 purposes here since the
-    # nearest-point distance for an interior pixel of `p` to `g` is bounded by
-    # its distance via `p`'s own boundary — standard practice (e.g. MONAI).
     p_edge, g_edge = _mask_edge(p), _mask_edge(g)
-
 
     dt_to_g = distance_transform_edt(~g)
     dt_to_p = distance_transform_edt(~p)
 
-    """d_p_to_g = dt_to_g[p]
-    d_g_to_p = dt_to_p[g]"""
     d_p_to_g = dt_to_g[p_edge]
     d_g_to_p = dt_to_p[g_edge]
-
 
     all_d = np.concatenate([d_p_to_g, d_g_to_p])
     return float(np.percentile(all_d, percentile))
@@ -150,14 +196,20 @@ def compute_all(
     pred: np.ndarray,
     gt: np.ndarray,
     metric_names: list[str],
-    boundary_dilation_px: int = DEFAULT_DILATION_PX,
+    boundary_dilation_px: int | None = None,
+    boundary_dilation_ratio: float = DEFAULT_DILATION_RATIO,
     hd95_percentile: float = 95.0,
 ) -> dict[str, float]:
     """Compute the requested subset of metrics for one (pred, gt) pair."""
     out = {}
     for name in metric_names:
         if name == "boundary_iou":
-            out[name] = boundary_iou(pred, gt, dilation_px=boundary_dilation_px)
+            out[name] = boundary_iou(
+                pred,
+                gt,
+                dilation_px=boundary_dilation_px,
+                dilation_ratio=boundary_dilation_ratio,
+            )
         elif name == "hd95":
             out[name] = hd95(pred, gt, percentile=hd95_percentile)
         else:

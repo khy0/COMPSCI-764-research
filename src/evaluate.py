@@ -65,14 +65,13 @@ def evaluate_run(
     """Score every prediction in `pred_dir` against GT for images in `split_file`.
     Returns a list of per-image result dicts (also the rows written to the CSV)."""
     metric_names = eval_config["metrics"]
-    dilation_px = eval_config["boundary_iou"]["dilation_px"]
-    if dilation_px is None:
-        raise ValueError(
-            "configs/eval.yaml: boundary_iou.dilation_px is still null (TODO). "
-            "This is an open item in decisions.md — agree a value with Balamurali "
-            "before running a real evaluation pass. Pass --dilation-px to override "
-            "for a one-off/debug run without editing the config."
-        )
+    # dilation_px is a manual per-run override (None by default — the normal
+    # path resolves a per-image width from dilation_ratio instead; see
+    # metrics.resolve_dilation_px() and decisions.md, 2026-09-30 entry).
+    dilation_px = eval_config["boundary_iou"].get("dilation_px")
+    dilation_ratio = eval_config["boundary_iou"].get(
+        "dilation_ratio", 0.02
+    )
     hd95_percentile = eval_config["hd95"]["percentile"]
 
     image_ids = read_split_file(split_file)
@@ -98,6 +97,7 @@ def evaluate_run(
             gt,
             metric_names,
             boundary_dilation_px=dilation_px,
+            boundary_dilation_ratio=dilation_ratio,
             hd95_percentile=hd95_percentile,
         )
         gt_area_pct = 100.0 * gt.sum() / gt.size
@@ -150,8 +150,12 @@ def main():
     parser.add_argument("--pred-threshold", type=int, default=127)
     parser.add_argument("--pred-ext", default=".png")
     parser.add_argument("--dilation-px", type=int, default=None,
-                         help="Override configs/eval.yaml boundary_iou.dilation_px "
-                              "for a one-off run (does not edit the config file).")
+                         help="Force a FIXED boundary-band width in pixels for every "
+                              "image, overriding the default per-image ratio-based "
+                              "width (dilation_ratio, e.g. 0.02 = 2%% of each image's "
+                              "own diagonal — see metrics.resolve_dilation_px()). "
+                              "Normally leave this unset; it's for a one-off/debug "
+                              "run at a fixed width, not for real evaluation passes.")
     parser.add_argument("--out-csv", default=None,
                          help="Defaults to configs/eval.yaml output.per_image_csv")
     parser.add_argument("--no-append", action="store_true",
