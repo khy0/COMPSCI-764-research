@@ -1,0 +1,22 @@
+# Week 1 Task 5 smoke-test split ONLY — not one of the official nested
+# brackets in configs/data.yaml. Do not use for real training runs.
+cju5hjxaae3i40850h5z2laf5
+cju40jl7skiuo0817p0smlgg8
+cju43in5fm22c08175rxziqrk
+cju3xhpvvimda0987ygrpzni2
+cju7eueum2oqn0850rodmx8zo
+cju8c5223s8j80850b4kealt4
+cju3280wv1ir009882jze27tc
+cju5v8pgplg6k0755rvi2t63h
+cju8bljw9rqk20801kr54akrl
+cju5u6wf0kh1t0755bg1ssixv
+cju5wphwwlu3m0987hh3ltg88
+cju5fb86jd1jp0755b1ukbhq5
+cju5von04litr08718j8po40a
+cju7b3f5h1sm40755i572jden
+cju40wto5kxwi0755it190f2k
+cju41kd7yl4nm0850gil5qqwh
+cju2t62nq45jl0799odpufwx6
+cju33belnbyhm0878yxl42233
+cju7d2q1k27nf08715zshsckt
+cju2rzpsmtb0f0835jabkbao1
