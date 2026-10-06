@@ -10,7 +10,20 @@ metrics:
   - recall
 
 boundary_iou:
-  dilation_px: null              # TODO (decisions.md + Methodology checklist item)
+  # Resolved PER IMAGE as dilation_ratio * that image's own diagonal (min 1px),
+  # not one fixed pixel count — Kvasir-SEG images range from 332x487 to
+  # 1920x1072 (diagonal varies ~3.7x), so a single fixed width would be a
+  # razor-thin band on small images and far too strict on large ones. 0.02 is
+  # the default from the original paper (Cheng et al., CVPR 2021) and its
+  # official implementation, not a value this project invented — works out to
+  # 12px at the smallest Kvasir-SEG image and 44px at the largest. Decided and
+  # closed 2026-09-30, see decisions.md.
+  dilation_ratio: 0.02
+  # Manual override: set this to a fixed integer instead to force the same
+  # pixel width on every image regardless of its resolution (debug/one-off use
+  # only — this is not how the real evaluation pass should be run). Leave null
+  # for the normal, per-image ratio-based behaviour above.
+  dilation_px: null
 
 hd95:
   percentile: 95
