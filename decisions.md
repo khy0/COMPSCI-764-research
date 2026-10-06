@@ -370,3 +370,9 @@ comparison once the multiple-comparisons stance (still open above) is
 settled.
 
 **Owner:** Sebastian.
+
+| 2026-10-06 | 3.1 box-gt data received | Received Sebastian's SAM 3 box-gt results (200 images). | Balamurali |
+| 2026-10-06 | 3.2 Mansoori et al. reported range | Mansoori et al., "Polyp SAM 2" (ICHMS 2025 / arXiv:2408.05892), Table 2: box-gt mDice=0.939. Verified against the PDF directly. | Balamurali |
+| 2026-10-06 | 3.3 box-gt cross-check | Our SAM3 box-gt mean Dice=0.8943 (std=0.1669, n=200) vs Mansoori's 0.9390 (SAM 2). Gap=+0.0447. Verdict: PASS. | Balamurali |
+
+| 2026-10-06 | Week 2 Task 4 — compute profiling hooks (U-Net) | PASS (with caveat) — reused Sebastian's src/profiling.py ComputeProfiler/count_params, same methodology as SAM3 side. 10pct/seed0 test run: 7,763,041 trainable params, total training wall-clock=321.9s, inference latency (steady-state, excl. first-call MPS cold-start of 619ms) mean=2.72ms std=0.41ms over 200 test images. Peak memory NOT separable between training/inference on MPS — ru_maxrss is a process-lifetime high-water mark (612.4MB for both), a documented limitation of src/profiling.py's CPU/MPS path, not a per-call peak like the CUDA path gives. | Balamurali |
