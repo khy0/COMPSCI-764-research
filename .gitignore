@@ -26,4 +26,4 @@ wandb/
 .idea/
 
 # Results
-results/sam3_preds/*
+results/sam3_preds/*results/unet_preds/*
