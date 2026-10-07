@@ -393,3 +393,25 @@ Note: high seed variance at 10pct/25pct (~0.16-0.17 spread); 50pct_seed1
 is a clear outlier vs. seed0/seed2 — flagged for follow-up.
 100pct_seed2 ran the full 100-epoch cap without early stopping
 (best val_dice=0.8327 @ epoch 97); the other 11 runs all stopped earlier.
+
+## Week 3 Task 1.4/1.5 — U-Net test-set evaluation (all 12 checkpoints)
+Date: 2026-10-07
+Status: COMPLETE
+
+Ran src/evaluate_unet_grid.py: inference on frozen test.txt (200 images) for all
+12 checkpoints, scored via shared src/evaluate.py (real methodology — dilation_ratio
+=0.02, not the earlier --dilation-px=2 one-off override), appended to
+results/per_image_results.csv (now 3400 rows: 1000 sam3 + 2400 unet, no dupes/missing).
+
+Test-set Dice per bracket: 10pct=0.479  25pct=0.484  50pct=0.705  100pct=0.819
+(monotonic increase confirmed, consistent with validation Dice per run — no
+leak/pipeline-bug indication).
+
+50pct_seed1 outlier (0.542 vs 0.794/0.779 for seeds 0/2) confirmed at test-set
+level too — not a validation artifact, still unexplained, flagged for Sebastian.
+
+7/2400 unet rows have non-finite hd95 (empty predicted or GT mask on that image)
+— excluded from hd95 means by evaluate.py's own filtering, expected behaviour.
+
+Deleted stale results/unet_100pct_seed1_per_image.csv (old checkpoint, old
+dilation override, superseded by this run).
