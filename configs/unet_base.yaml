@@ -19,9 +19,9 @@ training:
   lr: 0.001
   lr_schedule: cosine             # or "plateau" — pick one and keep it fixed across brackets
   budget_mode: max_iterations     # TODO (decisions.md): confirm epochs vs. iterations
-  max_iterations: null            # TODO: set once decided
+  max_iterations: 100            
   early_stopping_metric: val_dice
-  patience: null                  # TODO: set once decided
+  patience: 10                 
   seeds: [0, 1, 2]                # 3 seeds per bracket -> 12 runs total
 
 augmentation:

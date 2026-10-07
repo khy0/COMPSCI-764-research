@@ -376,3 +376,20 @@ settled.
 | 2026-10-06 | 3.3 box-gt cross-check | Our SAM3 box-gt mean Dice=0.8943 (std=0.1669, n=200) vs Mansoori's 0.9390 (SAM 2). Gap=+0.0447. Verdict: PASS. | Balamurali |
 
 | 2026-10-06 | Week 2 Task 4 — compute profiling hooks (U-Net) | PASS (with caveat) — reused Sebastian's src/profiling.py ComputeProfiler/count_params, same methodology as SAM3 side. 10pct/seed0 test run: 7,763,041 trainable params, total training wall-clock=321.9s, inference latency (steady-state, excl. first-call MPS cold-start of 619ms) mean=2.72ms std=0.41ms over 200 test images. Peak memory NOT separable between training/inference on MPS — ru_maxrss is a process-lifetime high-water mark (612.4MB for both), a documented limitation of src/profiling.py's CPU/MPS path, not a per-call peak like the CUDA path gives. | Balamurali |
+
+## Week 3 Task 1 — U-Net grid (4 brackets x 3 seeds = 12 runs)
+Date: 2026-10-07
+Status: COMPLETE
+
+Resolved config/unet_base.yaml TODOs: max_iterations=100, patience=10.
+
+Best val_dice per run:
+  10pct:  seed0=0.5327  seed1=0.5107  seed2=0.3716
+  25pct:  seed0=0.5425  seed1=0.4947  seed2=0.3709
+  50pct:  seed0=0.7927  seed1=0.5187  seed2=0.7916
+  100pct: seed0=0.8249  seed1=0.8029  seed2=0.8327
+
+Note: high seed variance at 10pct/25pct (~0.16-0.17 spread); 50pct_seed1
+is a clear outlier vs. seed0/seed2 — flagged for follow-up.
+100pct_seed2 ran the full 100-epoch cap without early stopping
+(best val_dice=0.8327 @ epoch 97); the other 11 runs all stopped earlier.
