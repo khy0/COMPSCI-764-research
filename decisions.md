@@ -140,6 +140,7 @@ Getting `import sam3` to work on Apple Silicon (env `cs764`, Python 3.11) needed
   from the root `import sam3` resolves to the `./sam3` checkout folder.
 
 
+
 | Date | Decision | Rationale | Decided by | 
 |---|---|---|---|
 | 2026-09-25 | Week 1 Task 5 — U-Net smoke test | WARN — no CUDA device, ran on mps (Apple Silicon (mps)), torch 2.11.0. requirements.txt versions are not yet pinned (open TODO in the file itself). | Balamurali |
@@ -150,6 +151,19 @@ Getting `import sam3` to work on Apple Silicon (env `cs764`, Python 3.11) needed
 | 2026-09-25 | 5.6 loss decreased | PASS — loss dropped 1.3389 -> 1.2746 across the 2 epochs. | Balamurali |
 | 2026-09-25 | 5.7 checkpoint save/reload | PASS — checkpoint saved to checkpoints/unet_smoke_test.pt and reloaded into a fresh UNet instance, forward pass on a real batch ran with no errors. | Balamurali |
 | 2026-09-25 | 5.8 runtime/memory/bugs | Device=mps (Apple Silicon (mps)), total wall-clock=5.5s over 2 epochs / 20 images, 2165.9 MB MPS driver-allocated memory (approximate, no per-run peak reset on MPS). Bugs hit: none. | Balamurali |
+| 2026-09-27 | Week 2 Task 1 — U-Net training loop | PASS — visually spot-checked augmented image+mask pairs across several re-runs (flip/rotate/scale-jitter/colour-jitter via albumentations), mask stayed aligned with the image in every case. | Balamurali |
+| 2026-09-27 | 1.2 early stopping | PASS — trained 10pct/seed0 for 14 epochs (early-stopped, patience=10), best val_dice=0.3766 (src/metrics.py's dice(), same fn evaluate.py uses). | Balamurali |
+| 2026-09-27 | 1.3 checkpoint save/reload | PASS — saved checkpoints/unet_10pct_seed0_last.pt and checkpoints/unet_10pct_seed0_best.pt (model+optimizer state, epoch, best_val_dice, seed, bracket); reloaded into a fresh model+optimizer, re-evaluated val_dice=0.3355, matches last epoch's in-memory score: True. | Balamurali |
+| 2026-09-27 | 1.4 seeding | PASS — set_seed(0) seeds random/numpy/torch (+ CUDA determinism flags when a GPU is present), called before any dataset/model/DataLoader construction below. | Balamurali |
+| 2026-09-27 | Open TODO reminder | training.patience used 10 as a default (not yet a confirmed decision); training.max_iterations still null — both still need a joint decision logged separately. | Balamurali |
+
+**Note (2026-09-28):** "env `cs764`" in the entry above refers to Sebastian's laptop
+environment specifically — Balamurali's Mac mini uses a separate `base` conda
+environment with the same requirements.txt packages installed. Env *names* differ
+per machine; only the package versions need to match.| 2026-09-28 | Week 2 Task 2 — first full 100%-bracket run | PASS — trained 100pct/seed1 for 98 epochs, best val_dice=0.8319, total wall-clock=3474.5s on mps, no crashes. | Balamurali |
+| 2026-09-28 | 2.2 loss curve shape | PASS — train_loss 1.1810 -> 0.2826, val_dice 0.3874 -> 0.8222 (best 0.8319) over 98 epochs. Curve shape looks like real learning. | Balamurali |
+| 2026-09-28 | 2.3 test-set Dice sanity check | PASS — test-set Dice (via src/evaluate.py, dilation_px override=2) mean=0.8293 std=0.1819 over 200 images. plausible for a first from-scratch U-Net attempt. | Balamurali |
+| 2026-09-28 | 2.4 open TODO reminder | boundary_iou.dilation_px used 2 as a one-off --dilation-px override for this run only (configs/eval.yaml still has it as null) — still needs a real joint decision with Sebastian before Week 3's grid. | Balamurali |
 
 ## 2026-09-30 — metrics.py: EPS→0 and HD95 contour fix, reviewed and applied
 
@@ -356,3 +370,9 @@ comparison once the multiple-comparisons stance (still open above) is
 settled.
 
 **Owner:** Sebastian.
+
+| 2026-10-06 | 3.1 box-gt data received | Received Sebastian's SAM 3 box-gt results (200 images). | Balamurali |
+| 2026-10-06 | 3.2 Mansoori et al. reported range | Mansoori et al., "Polyp SAM 2" (ICHMS 2025 / arXiv:2408.05892), Table 2: box-gt mDice=0.939. Verified against the PDF directly. | Balamurali |
+| 2026-10-06 | 3.3 box-gt cross-check | Our SAM3 box-gt mean Dice=0.8943 (std=0.1669, n=200) vs Mansoori's 0.9390 (SAM 2). Gap=+0.0447. Verdict: PASS. | Balamurali |
+
+| 2026-10-06 | Week 2 Task 4 — compute profiling hooks (U-Net) | PASS (with caveat) — reused Sebastian's src/profiling.py ComputeProfiler/count_params, same methodology as SAM3 side. 10pct/seed0 test run: 7,763,041 trainable params, total training wall-clock=321.9s, inference latency (steady-state, excl. first-call MPS cold-start of 619ms) mean=2.72ms std=0.41ms over 200 test images. Peak memory NOT separable between training/inference on MPS — ru_maxrss is a process-lifetime high-water mark (612.4MB for both), a documented limitation of src/profiling.py's CPU/MPS path, not a per-call peak like the CUDA path gives. | Balamurali |
