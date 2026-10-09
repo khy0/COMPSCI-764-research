@@ -472,21 +472,26 @@ real, seed-spread-exceeding jump.
 50pct_seed1 outlier (0.542 vs 0.794/0.779 for seeds 0/2) confirmed at test-set
 level too — not a validation artifact, still unexplained, flagged for Sebastian.
 
-7/2400 unet rows have non-finite hd95. All 7 have dice=0.0 on that image, i.e.
-the PREDICTED mask was empty (GT is never empty for Kvasir-SEG, so "empty GT"
+8/2400 unet rows have non-finite hd95 (re-counted after the bilinear-upsampling
+fix above — was 7 before that fix; the fix changed which borderline
+predictions end up empty). All 8 have dice=0.0 on that image, i.e. the
+PREDICTED mask was empty (GT is never empty for Kvasir-SEG, so "empty GT"
 cannot occur here — correcting the earlier, inaccurate "empty predicted or GT
-mask" wording). The 7 rows, by run_id/image_id:
+mask" wording). The 8 rows, by run_id/image_id:
   25pct_seed0  / cju1fuoa4wmc50835qfd11sp9
   50pct_seed0  / cju15l5ubz9yh0855b3ivdpse
+  50pct_seed2  / cju15l5ubz9yh0855b3ivdpse
   50pct_seed2  / cju6vvb8svhed0801jjcquh5e
   50pct_seed2  / cju89z6pqpqfx0817mfv8ixjc
   100pct_seed0 / cju89z6pqpqfx0817mfv8ixjc
   100pct_seed1 / cju15l5ubz9yh0855b3ivdpse
   100pct_seed1 / cjyzjzssvd8pq0838f4nolj5l
 Excluded from hd95 means by evaluate.py's own filtering, expected behaviour.
-Two image_ids repeat across runs (cju15l5ubz9yh0855b3ivdpse,
-cju89z6pqpqfx0817mfv8ixjc) — both have low gt_area_pct (3.48%, 1.49%), worth a
-quick visual check; likely genuinely hard small polyps rather than run noise.
+cju15l5ubz9yh0855b3ivdpse now shows up empty in THREE separate runs
+(50pct_seed0, 50pct_seed2, 100pct_seed1) and cju89z6pqpqfx0817mfv8ixjc in two
+(50pct_seed2, 100pct_seed0) — both have low gt_area_pct (3.48%, 1.49%). Worth
+a quick visual check; reads as genuinely hard small polyps that the model
+is marginally under-confident on, not run-specific noise.
 
 Deleted stale results/unet_100pct_seed1_per_image.csv (old checkpoint, old
 dilation override, superseded by this run).
