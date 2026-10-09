@@ -224,17 +224,15 @@ def main():
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--config", default=str(REPO_ROOT / "configs" / "unet_base.yaml"))
     parser.add_argument(
-        "--max-epochs", type=int, default=100,
-        help="Safety cap on epochs. configs/unet_base.yaml's training.max_iterations "
-             "is still an open TODO (decisions.md) — this flag lets you run/observe "
-             "before that number is fixed (Week 2 Task 2).",
+        "--max-epochs", type=int, default=None,
+        help="Safety cap on epochs. Defaults to configs/unet_base.yaml's "
+             "training.max_epochs; pass this flag to override for a one-off run.",
     )
     parser.add_argument(
-        "--patience", type=int, default=10,
+        "--patience", type=int, default=None,
         help="Early-stopping patience in epochs with no val-Dice improvement. "
-             "configs/unet_base.yaml's training.patience is still null (open TODO) — "
-             "10 is a common default; confirm/change it and log your choice in "
-             "decisions.md yourself (Task 1.2 asks you to 'pick and document N').",
+             "Defaults to configs/unet_base.yaml's training.patience; pass this "
+             "flag to override for a one-off run.",
     )
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--device", default=None)
@@ -259,6 +257,9 @@ def main():
 
     with open(args.config) as f:
         cfg = yaml.safe_load(f)
+
+    max_epochs = args.max_epochs if args.max_epochs is not None else cfg["training"]["max_epochs"]
+    patience = args.patience if args.patience is not None else cfg["training"]["patience"]
 
     if torch.cuda.is_available():
         device = torch.device("cuda")
@@ -297,7 +298,7 @@ def main():
     best_ckpt_path = checkpoints_dir / f"unet_{run_name}_best.pt"
     last_ckpt_path = checkpoints_dir / f"unet_{run_name}_last.pt"
 
-    profile_csv = args.profile_csv or str(REPO_ROOT / "results" / f"unet_compute_profile_{run_name}.csv")
+    profile_csv = args.profile_csv or str(REPO_ROOT / "results" / "compute_profiles" / f"unet_compute_profile_{run_name}.csv")
 
     # Task 4.1 — trainable parameter count, via Sebastian's count_params() so the
     # number is computed identically on both arms (same function, same definition
@@ -320,7 +321,7 @@ def main():
     # this is a true peak-over-the-whole-run number on CUDA; on CPU/MPS it's the
     # process-lifetime peak RSS — see src/profiling.py's own docstring caveat).
     with profiler.measure(run_id=f"train_{run_name}", image_id="all_epochs"):
-        for epoch in range(1, args.max_epochs + 1):
+        for epoch in range(1, max_epochs + 1):
             t0 = time.perf_counter()
             model.train()
             running_loss = 0.0
@@ -357,12 +358,12 @@ def main():
             save_checkpoint(last_ckpt_path, model, optimizer, epoch, best_val_dice, args.seed, args.bracket)
 
             marker = "*" if improved else " "
-            print(f"Epoch {epoch:3d}/{args.max_epochs}  train_loss={train_loss:.4f}  "
+            print(f"Epoch {epoch:3d}/{max_epochs}  train_loss={train_loss:.4f}  "
                   f"val_dice={val_dice:.4f}{marker}  best={best_val_dice:.4f}  "
                   f"no_improve={epochs_without_improvement}  time={epoch_time:.1f}s")
 
-            if epochs_without_improvement >= args.patience:
-                print(f"Early stopping: no val_dice improvement for {args.patience} epochs.")
+            if epochs_without_improvement >= patience:
+                print(f"Early stopping: no val_dice improvement for {patience} epochs.")
                 break
 
     # profiler.records has exactly one row at this point (the "train_..." row
