@@ -128,13 +128,18 @@ def run_one(bracket: str, seed: int, data_root: Path, cfg: dict, device: torch.d
         for batch in test_loader:
             images = batch["image"].to(device)
             logits = model(images)
-            preds = (torch.sigmoid(logits) > 0.5).squeeze(1).cpu().numpy().astype(np.uint8)
-            for image_id, pred in zip(batch["image_id"], preds):
+            probs = torch.sigmoid(logits).squeeze(1).cpu().numpy().astype(np.float32)
+            for image_id, prob in zip(batch["image_id"], probs):
                 gt_path = data_root / "masks" / f"{image_id}.jpg"
                 gt_native_shape = np.array(Image.open(gt_path).convert("L")).shape
-                pred_img = Image.fromarray(pred * 255).resize(
-                    (gt_native_shape[1], gt_native_shape[0]), Image.NEAREST
+                # Upsample the CONTINUOUS probability map bilinearly to native resolution
+                # FIRST, then threshold — avoids blocky NEAREST edges from thresholding at
+                # 256px. Per Sebastian's PR #4 review comment.
+                prob_img = Image.fromarray(prob).resize(
+                    (gt_native_shape[1], gt_native_shape[0]), Image.BILINEAR
                 )
+                pred_native = (np.array(prob_img) > 0.5).astype(np.uint8) * 255
+                pred_img = Image.fromarray(pred_native)
                 pred_img.save(pred_dir / f"{image_id}.png")
                 n_written += 1
     print(f"[{run_name}] wrote {n_written} predicted masks -> {pred_dir.relative_to(REPO_ROOT)}")

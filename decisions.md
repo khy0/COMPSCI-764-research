@@ -18,10 +18,13 @@ Format:
 
 ## Open decisions (carried over from the planning document — resolve in Week 1)
 
-- [ ] Epochs vs. iterations for U-Net training budget matching (P3). Planning doc
-      recommends fixed max iterations + early stopping on validation Dice — confirm
-      and set `training.max_iterations` / `training.patience` in
-      `configs/unet_base.yaml`.
+- [ ] Epochs vs. iterations for U-Net training budget matching (P3) — STILL OPEN,
+      see 2026-10-10 entry below. `training.max_epochs` / `training.patience` are
+      now wired from `configs/unet_base.yaml` (fixed 2026-10-09, PR #4), but that
+      only fixed a dead-config-key bug — it does NOT make the budget matched
+      across brackets, since brackets differ ~10x in images-per-epoch. Needs a
+      joint decision: step-based budget, or a logged, justified epoch-based
+      deviation.
 - [x] ~~Boundary IoU dilation width (pixels)~~ — RESOLVED 2026-09-30, see dated
       entry below. Not a fixed pixel count: `configs/eval.yaml:
       boundary_iou.dilation_ratio` (0.02, the paper's own default), resolved
@@ -394,6 +397,59 @@ is a clear outlier vs. seed0/seed2 — flagged for follow-up.
 100pct_seed2 ran the full 100-epoch cap without early stopping
 (best val_dice=0.8327 @ epoch 97); the other 11 runs all stopped earlier.
 
+## 2026-10-10 — Training budget matching (P3): status correction + rationale
+
+**Status: OPEN (was incorrectly implied closed by the 2026-10-07 entry above).**
+Flagged by Sebastian in PR #4 review — no rationale or joint sign-off was ever
+logged for closing this, and he's right that the earlier fix (wiring
+`max_epochs`/`patience` from config, PR #4) only fixed a *different* bug: those
+keys were previously dead (ignored by `train_unet.py`, which used hardcoded
+argparse defaults instead). That fix is real and still correct, but it does not
+make the training budget *matched* across brackets as P3 requires.
+
+**The actual problem:** budgeting by epoch count is not comparable across
+brackets of very different size. Confirmed from `logs/train_*.log`'s
+`train_images=` line:
+
+| bracket | train_images | batch_size | steps/epoch (approx) |
+|---|---|---|---|
+| 10pct  | ~70  | 8 | ~9  |
+| 25pct  | 175  | 8 | ~22 |
+| 50pct  | 350  | 8 | ~44 |
+| 100pct | 700  | 8 | ~88 |
+
+"100 epochs, patience 10" is a ~10x-different gradient-update budget depending
+on bracket — this directly confounds the RQ.
+
+**Evidence several low-bracket runs plausibly stopped before real learning
+happened**, from total-epochs vs. best-epoch in `logs/train_*.log`:
+
+| run | total epochs | best epoch | best val_dice |
+|---|---|---|---|
+| 10pct_seed1 | 40 | 30 | 0.5107 |
+| 10pct_seed2 | 11 | 1  | 0.3716 |
+| 25pct_seed0 | 52 | 42 | 0.5425 |
+| 25pct_seed1 | 32 | 22 | 0.4947 |
+| 25pct_seed2 | 13 | 3  | 0.3709 |
+| 50pct_seed1 | 38 | 28 | 0.5187 |
+
+`10pct_seed2` and `25pct_seed2` effectively never trained past their first few
+epochs before patience ran out — low Dice there is very likely a stopping
+artifact, not purely data scarcity. (`10pct_seed0` has no log file — that run
+reused an older pre-grid checkpoint and was never re-executed by the Week 3
+grid script; it should be re-run from scratch.)
+
+**Decision needed (joint, not yet made):** (a) switch to a step-based budget —
+same `max_steps` across brackets, validate every K steps, patience counted in
+evaluations — or (b) keep epoch-based budgeting with an explicit, logged
+justification. Either way, add a minimum-epochs-before-early-stopping guard.
+Also open: `training.lr_schedule: cosine` is set in `configs/unet_base.yaml`
+but is not implemented anywhere in `src/train_unet.py` — decide whether to
+implement it or remove the key and log it as unused.
+
+**Owner:** Sebastian + Balamurali (joint sign-off required before re-closing
+the checklist item above).
+
 ## Week 3 Task 1.4/1.5 — U-Net test-set evaluation (all 12 checkpoints)
 Date: 2026-10-07
 Status: COMPLETE
@@ -403,15 +459,34 @@ Ran src/evaluate_unet_grid.py: inference on frozen test.txt (200 images) for all
 =0.02, not the earlier --dilation-px=2 one-off override), appended to
 results/per_image_results.csv (now 3400 rows: 1000 sam3 + 2400 unet, no dupes/missing).
 
-Test-set Dice per bracket: 10pct=0.479  25pct=0.484  50pct=0.705  100pct=0.819
-(monotonic increase confirmed, consistent with validation Dice per run — no
-leak/pipeline-bug indication).
+Status: PROVISIONAL — see 2026-10-10 entries below (training-budget fairness
+still open; evaluation mask-resizing fix pending; all 12 runs should be
+re-evaluated once that's fixed).
+
+Test-set Dice per bracket: 10pct=0.479  25pct=0.484  50pct=0.705  100pct=0.819.
+10pct->25pct (0.479->0.484) is NOT a confirmed trend — it's well inside the
+observed seed spread at those brackets (~0.15-0.17) and should be read as "no
+detectable difference," not "monotonic increase confirmed." 50pct->100pct is a
+real, seed-spread-exceeding jump.
 
 50pct_seed1 outlier (0.542 vs 0.794/0.779 for seeds 0/2) confirmed at test-set
 level too — not a validation artifact, still unexplained, flagged for Sebastian.
 
-7/2400 unet rows have non-finite hd95 (empty predicted or GT mask on that image)
-— excluded from hd95 means by evaluate.py's own filtering, expected behaviour.
+7/2400 unet rows have non-finite hd95. All 7 have dice=0.0 on that image, i.e.
+the PREDICTED mask was empty (GT is never empty for Kvasir-SEG, so "empty GT"
+cannot occur here — correcting the earlier, inaccurate "empty predicted or GT
+mask" wording). The 7 rows, by run_id/image_id:
+  25pct_seed0  / cju1fuoa4wmc50835qfd11sp9
+  50pct_seed0  / cju15l5ubz9yh0855b3ivdpse
+  50pct_seed2  / cju6vvb8svhed0801jjcquh5e
+  50pct_seed2  / cju89z6pqpqfx0817mfv8ixjc
+  100pct_seed0 / cju89z6pqpqfx0817mfv8ixjc
+  100pct_seed1 / cju15l5ubz9yh0855b3ivdpse
+  100pct_seed1 / cjyzjzssvd8pq0838f4nolj5l
+Excluded from hd95 means by evaluate.py's own filtering, expected behaviour.
+Two image_ids repeat across runs (cju15l5ubz9yh0855b3ivdpse,
+cju89z6pqpqfx0817mfv8ixjc) — both have low gt_area_pct (3.48%, 1.49%), worth a
+quick visual check; likely genuinely hard small polyps rather than run noise.
 
 Deleted stale results/unet_100pct_seed1_per_image.csv (old checkpoint, old
 dilation override, superseded by this run).
