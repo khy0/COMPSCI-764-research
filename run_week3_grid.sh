@@ -37,7 +37,7 @@ for bracket in "${BRACKETS[@]}"; do
     I=$((I + 1))
     run_name="${bracket}_seed${seed}"
     ckpt="checkpoints/unet_${run_name}_best.pt"
-    profile_csv="results/unet_compute_profile_${run_name}.csv"
+    profile_csv="results/compute_profiles/unet_compute_profile_${run_name}.csv"
     log_file="logs/train_${run_name}.log"
 
     if [[ -f "$ckpt" && -f "$profile_csv" ]]; then

@@ -495,3 +495,39 @@ is marginally under-confident on, not run-specific noise.
 
 Deleted stale results/unet_100pct_seed1_per_image.csv (old checkpoint, old
 dilation override, superseded by this run).
+
+## 2026-10-12 — Week 3 grid re-run: full retrain (unintended), early-stopping failure found
+
+**What happened:** run_week3_grid.sh's skip-check pointed at a stale path for
+the profiling CSV (pre-dates PR #4's move to results/compute_profiles/), so
+it silently retrained all 12 configs instead of just the intended
+10pct_seed0 fix. All 12 checkpoints are now fresh (2026-10-09/10).
+
+**New best val_dice per run:**
+  10pct:  seed0=0.4992  seed1=0.4739  seed2=0.4953
+  25pct:  seed0=0.5194  seed1=0.7077  seed2=0.5171
+  50pct:  seed0=0.8166  seed1=0.5295  seed2=0.5446
+  100pct: seed0=0.5259  seed1=0.8010  seed2=0.8338
+
+**Critical finding — 100pct_seed0 (val_dice=0.5259, stopped at epoch 19) is
+not a valid result.** Every other 100pct run reaches 0.80+. Its log shows
+early stopping triggered after a noisy dip (epoch 6: val_dice=0.2154) burned
+through patience while the run was still mid-climb. This demonstrates the
+early-stopping criterion itself is noise-sensitive independent of bracket
+size or step-count budget — it just killed the largest, most data-rich
+bracket by bad luck. 25pct_seed1 shows the mirror failure: hit the 100-epoch
+cap still improving (0.7077* at epoch 99), right-censored rather than
+converged.
+
+**This escalates the open 2026-10-10 training-budget entry above:** whatever
+step-vs-epoch decision gets made, the stopping rule also needs smoothing
+(e.g. patience measured against a moving average of val_dice, not the raw
+single-epoch value) or higher patience — this would have broken 100pct_seed0
+regardless of the budget-matching fix.
+
+**Status: current per_image_results.csv numbers from this grid should be
+treated as provisional pending a stopping-criterion fix and a targeted
+re-run of 100pct_seed0 at minimum.**
+
+**Owner:** Sebastian + Balamurali (same joint call as the budget decision —
+recommend covering both in one sync, not two).
