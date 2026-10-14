@@ -539,3 +539,36 @@ recommend covering both in one sync, not two).
 | 2026-10-14 | Pilot (100pct_seed0, 25pct_seed1, 50pct_seed2) completed under the new scheme (run_week3_pilot.sh, v2_ run tag, fixed 8,800-step budget / val every 88 steps / 3-validation moving-average selection / cosine+5% warmup / seeded Compose+DataLoader). All three runs recovered cleanly, no failures: 100pct_seed0 0.5259→0.8291, 25pct_seed1 0.7077→0.7974, 50pct_seed2 0.5446→0.8383. ~56 min/run (3,280–3,380s wall clock, device=mps). Checkpoints and profiles under checkpoints/unet_v2_* / results/compute_profiles/unet_compute_profile_v2_*.csv. | Clears the gate set in the 2026-10-13 entry — every piloted bracket, including the one that previously failed outright, now converges under the fixed scheme with no regression. Known open item: the run_week3_grid.sh resume/skip-path bug from 2026-10-12 was sidestepped for the pilot via --run-tag v2_, not actually fixed — needs resolving (or consistently applying the same tag) before the full 12-run grid, or it risks the same silent-retrain/skip failure mode again. | Balamurali Ragupathi — pending Sebastian Torres sign-off |
 | 2026-10-15 | Full 12-run grid (run_week3_grid.sh, v2_ run tag) completed — all 12 configs trained + evaluated on the frozen test set via evaluate_unet_grid.py --run-tag v2_ --force (old Oct 7 rows for all 12 run_ids correctly superseded, 3,400 total rows, 2,400 unet / 1,000 sam3, no duplicates). Test-set Dice per bracket: 10pct=0.768, 25pct=0.805, 50pct=0.829, 100pct=0.846 — monotonically increasing (confirmed True, vs. the old grid where 10pct->25pct, 0.479->0.484, was indistinguishable from seed noise). Per-run test Dice, boundary_iou, hd95, precision, recall all recorded in per_image_results.csv. | Clears the "provisional" status set in the 2026-10-13 entry — U-Net result rows are now final under the fixed scheme and safe to use for Week 4 analysis. The data-efficiency curve is now clean and usable for the RQ, which it wasn't under the broken grid. Also validates the training-dynamics fix end to end: the three pilot configs' val_dice (0.8291/0.7974/0.8383) and their test Dice (0.843/0.816/0.839) are consistent with each other and with the other seeds in their brackets — no sign the pilot numbers were a fluke. | Balamurali Ragupathi |
 
+## 2026-10-15 — Week 3 gate: master results file frozen (Tasks 3.1–3.3)
+
+**Master file:** `results/per_image_results.csv` is the Week 3 master results file
+(the plan called it `master_results.csv`; we kept the existing filename rather than
+renaming it). It is the single source of truth for all Week 4 analysis.
+
+**Frozen at:** commit `3e0f52a` (`3e0f52a76405f6dfbaff505455579ebf43417e82`), branch
+`week3-unet-grid`, committed 2026-10-15 07:04 NZDT. SHA-256 of the file:
+`4ce4f2e3bd0a9fe10c8272fba8e5352ded37c598c12ed7682f80e0e534e42f60`.
+Tagged `week3-frozen`. No new experiments after this point unless something is broken.
+
+**Contents:** 3,400 rows = 2,400 U-Net (200 test images x 12 runs: 4 brackets x 3 seeds)
++ 1,000 SAM 3 (200 test images x 5 prompt strategies). No duplicate rows, no blank
+Dice/IoU/Boundary IoU/precision/recall values. Schema:
+`arm, run_id, image_id, gt_area_pct, dice, iou, boundary_iou, hd95, precision, recall`.
+
+**Corrected HD95 count:** 19/2,400 U-Net rows have non-finite HD95 (`inf`), not 8.
+The earlier "8/2400" figure (2026-10-07 entry) predates the full grid retrain
+(2026-10-12 to 2026-10-15) and is superseded. All 19 rows have Dice = 0.0, i.e. the
+predicted mask was empty (GT is never empty in Kvasir-SEG). They are excluded from
+HD95 means by `evaluate.py`'s own filtering, as before. Distribution by run:
+50pct_seed1 (3), 100pct_seed1 (3), 10pct_seed1 (2), 50pct_seed0 (2), 50pct_seed2 (2),
+100pct_seed0 (2), 100pct_seed2 (2), 10pct_seed2 (1), 25pct_seed0 (1), 25pct_seed1 (1).
+No SAM 3 rows are affected. Report HD95 means with the exclusion count stated.
+
+**Late-commit note:** the file's last commit (2026-10-15) falls after the original
+Week 3 gate (2026-10-04). This is the retrain under the fixed training scheme
+(fixed 8,800-step budget, moving-average checkpoint selection), not new experiment
+design; the 2026-10-13 entry records the rationale.
+
+| Date | Decision | Rationale | Decided by |
+|---|---|---|---|
+| 2026-10-15 | Freeze `results/per_image_results.csv` at commit `3e0f52a` (tag `week3-frozen`) as the Week 3 deliverable. Both of us treat it as final; Week 4 analysis reads only from this file. | Marks the line between data collection and analysis (Week 3 gate). Row count and schema checked: 3,400 rows, no duplicates, 19 non-finite U-Net HD95 rows (all empty predictions), correcting the earlier count of 8. | Balamurali Ragupathi — Sebastian Torres confirmation pending |
