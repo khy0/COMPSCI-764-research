@@ -3,7 +3,7 @@
 For each of the 12 (bracket, seed) configs from the grid (configs/unet_base.yaml's
 seeds: [0, 1, 2] x brackets: 10pct/25pct/50pct/100pct):
 
-  1) Load the BEST checkpoint (checkpoints/unet_<run_name>_best.pt).
+  1) Load the BEST checkpoint (checkpoints/unet_<run_tag><run_name>_best.pt).
   2) Run inference over data/splits/test.txt (the frozen, untouched test set —
      never used for training or early stopping), same pattern as the Week 2
      Task 2 notebook (05_week2_task2_100pct_run.ipynb, cells 8-9): predictions
@@ -17,27 +17,34 @@ seeds: [0, 1, 2] x brackets: 10pct/25pct/50pct/100pct):
      results/per_image_results.csv (configs/eval.yaml's single source of
      truth), with arm=unet, run_id=<bracket>_seed<seed>.
 
+--run-tag (added 2026-10-14, see decisions.md pilot entry): the CHECKPOINT path
+looked up uses this prefix (e.g. "v2_" -> checkpoints/unet_v2_100pct_seed0_best.pt),
+so this script finds the fixed-scheme checkpoints trained under the 2026-10-13/14
+scheme instead of the ORIGINAL (broken, early-stopping) grid's checkpoints, which
+are still on disk with no prefix and would otherwise be silently picked up instead.
+The run_id written to results/per_image_results.csv is deliberately left WITHOUT
+the tag (stays "<bracket>_seed<seed>") — this is the canonical naming the rest of
+the pipeline (master_results.csv, Sebastian's SAM3 rows, Week 4 analysis) expects,
+and it's what lets --force correctly supersede the old stale rows for that run_id
+rather than leaving both old and new rows coexisting under different ids.
+
 Deliberately NOT using --dilation-px like the old Week 2 Task 2 notebook did —
 that was a one-off override because configs/eval.yaml's boundary_iou.dilation_px
 was still null at the time. It's since been decided (dilation_ratio=0.02, closed
 2026-09-30, see decisions.md) and src/evaluate.py reads that from the config by
-default now, so every run here uses the real, agreed methodology — this also
-means these 12 U-Net boundary_iou numbers will NOT be directly comparable to the
-old scratch results/unet_100pct_seed1_per_image.csv file (which used the
---dilation-px 2 override on an older checkpoint) — that file is now stale
-(superseded by this run's 100pct_seed1, trained fresh by the Week 3 grid script)
-and safe to delete/ignore.
+default now, so every run here uses the real, agreed methodology.
 
 Idempotent: before evaluating a run, checks whether results/per_image_results.csv
 already has rows for (arm=unet, run_id=<run_name>) and skips it (so re-running
 this script after a partial run doesn't duplicate rows — matters for Week 3 Task
 3.2's "no duplicate rows" sanity check). Pass --force to re-evaluate specific
-runs anyway (old rows for that run_id are removed first, then replaced).
+runs anyway (old rows for that run_id are removed first, then replaced) — this
+is REQUIRED after the 2026-10-14 grid re-run, since rows already exist from the
+Oct 7 evaluation of the original (now superseded) checkpoints.
 
 Usage (from repo root):
-    python src/evaluate_unet_grid.py
-    python src/evaluate_unet_grid.py --force                  # re-run all 12
-    python src/evaluate_unet_grid.py --only 100pct_seed1       # re-run just one
+    python src/evaluate_unet_grid.py --run-tag v2_ --force      # re-eval the fixed-scheme grid
+    python src/evaluate_unet_grid.py --run-tag v2_ --force --only 100pct_seed1
 """
 
 from __future__ import annotations
@@ -93,9 +100,11 @@ def drop_run_id(csv_path: Path, run_id: str) -> None:
         print(f"  (--force) removed {removed} existing rows for run_id={run_id}")
 
 
-def run_one(bracket: str, seed: int, data_root: Path, cfg: dict, device: torch.device, force: bool) -> bool:
-    run_name = f"{bracket}_seed{seed}"
-    ckpt_path = REPO_ROOT / "checkpoints" / f"unet_{run_name}_best.pt"
+def run_one(bracket: str, seed: int, data_root: Path, cfg: dict, device: torch.device,
+            force: bool, run_tag: str) -> bool:
+    run_name = f"{bracket}_seed{seed}"                 # canonical id — CSV + pred_dir
+    ckpt_name = f"{run_tag}{bracket}_seed{seed}"        # tagged id — checkpoint lookup only
+    ckpt_path = REPO_ROOT / "checkpoints" / f"unet_{ckpt_name}_best.pt"
     if not ckpt_path.exists():
         print(f"[{run_name}] SKIP — no checkpoint at {ckpt_path.relative_to(REPO_ROOT)}")
         return False
@@ -107,7 +116,7 @@ def run_one(bracket: str, seed: int, data_root: Path, cfg: dict, device: torch.d
     if already_done and force:
         drop_run_id(PER_IMAGE_CSV, run_name)
 
-    print(f"[{run_name}] loading checkpoint and running inference on test set...")
+    print(f"[{run_name}] loading checkpoint {ckpt_path.name} and running inference on test set...")
     resize = tuple(cfg["input"]["resize"])
     model = UNet(
         in_channels=3, out_channels=1,
@@ -170,6 +179,12 @@ def main():
     parser.add_argument("--force", action="store_true", help="Re-evaluate even if rows already exist.")
     parser.add_argument("--only", default=None, help="Run just one, e.g. --only 100pct_seed1")
     parser.add_argument("--config", default=str(REPO_ROOT / "configs" / "unet_base.yaml"))
+    parser.add_argument(
+        "--run-tag", default="",
+        help="Prefix used to find checkpoints, e.g. 'v2_' -> checkpoints/unet_v2_<bracket>_seed<seed>_best.pt. "
+             "Does NOT affect the run_id written to results/per_image_results.csv, which stays "
+             "'<bracket>_seed<seed>' so --force correctly supersedes old rows for that id.",
+    )
     args = parser.parse_args()
 
     with open(args.config) as f:
@@ -196,7 +211,7 @@ def main():
 
     results_ok = []
     for bracket, seed in combos:
-        ok = run_one(bracket, seed, data_root, cfg, device, force=args.force)
+        ok = run_one(bracket, seed, data_root, cfg, device, force=args.force, run_tag=args.run_tag)
         results_ok.append((f"{bracket}_seed{seed}", ok))
         print()
 
