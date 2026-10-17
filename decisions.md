@@ -572,3 +572,31 @@ design; the 2026-10-13 entry records the rationale.
 | Date | Decision | Rationale | Decided by |
 |---|---|---|---|
 | 2026-10-15 | Freeze `results/per_image_results.csv` at commit `3e0f52a` (tag `week3-frozen`) as the Week 3 deliverable. Both of us treat it as final; Week 4 analysis reads only from this file. | Marks the line between data collection and analysis (Week 3 gate). Row count and schema checked: 3,400 rows, no duplicates, 19 non-finite U-Net HD95 rows (all empty predictions), correcting the earlier count of 8. | Balamurali Ragupathi — Sebastian Torres confirmation pending |
+
+## 2026-10-15 — Week 4 Task 1.4: size-stratified results vs prior expectation
+
+**Verdict: prior expectation contradicted.** The planning doc predicted SAM 3 would do
+relatively better on large, well-defined polyps. In `results/week4/size_stratified_summary.csv`
+the opposite holds: SAM 3's advantage over U-Net is largest on small polyps and shrinks
+monotonically with polyp size. With the oracle box prompt, the Dice gap against U-Net-100%
+is +0.218 on small, +0.036 on medium and −0.022 on large polyps; Boundary IoU and HD95 show
+the same direction. U-Net overtakes SAM 3 first on large polyps (box-gt Dice crossover
+between 25% and 50% data), and SAM 3 stays ahead on small polyps at every bracket.
+
+**Strength of evidence.** The size effect ("large minus small" gap of −0.14 to −0.31 Dice) is
+far larger than the U-Net seed std (0.002–0.027). Individual near-zero cells, for example
+large/box-gt at 25% and 50% (+0.015, −0.003), are within seed spread and should be read as
+ties. The small bin has only 39 images. Values are descriptive means; bootstrap CIs and
+Wilcoxon tests are still pending (Sebastian).
+
+**Caveats.** (1) box-gt is an oracle prompt (SAM 3 upper bound), so the small-polyp advantage
+may largely reflect SAM 3 being told where the polyp is; the same pattern holds with the
+weaker pt-1 prompt, though with smaller gaps. (2) All 19 non-finite HD95 rows are U-Net
+empty predictions on small polyps (hd95_excluded_by_bin.csv), so U-Net's small-bin HD95 mean
+is flattered and SAM 3's HD95 advantage there is probably understated. (3) Possible
+explanations (untested): U-Net's 256x256 input loses detail on small polyps and has few small
+training examples; to be checked in the Task 3 worst-case inspection.
+
+| Date | Decision | Rationale | Decided by |
+|---|---|---|---|
+| 2026-10-15 | Report Task 1.4 as a contradicted prior: SAM 3's lead is largest on small polyps and shrinks with size, not the reverse. Present it as a finding, with oracle-prompt and small-n caveats. | Gap tables (SAM 3 minus U-Net) for box-gt and pt-1 show a consistent negative "large minus small" in Dice and Boundary IoU, well above seed std. | Balamurali Ragupathi |

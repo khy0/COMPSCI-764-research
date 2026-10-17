@@ -29,3 +29,5 @@ wandb/
 results/sam3_preds/*
 results/unet_preds/*
 results/compute_profiles/* 
+results/week4/*
+
