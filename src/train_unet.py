@@ -45,6 +45,7 @@ import random
 import sys
 import time
 from pathlib import Path
+import math
 
 import albumentations as A
 import numpy as np
@@ -88,23 +89,27 @@ def set_seed(seed: int) -> None:
 # Task 1.1 — Mask-aware augmentation pipeline
 # --------------------------------------------------------------------------- #
 
-def build_train_transform() -> A.Compose:
+def build_train_transform(seed: int) -> A.Compose:
     """Flips, rotation, scale jitter, colour jitter — identical across all 4
     brackets (configs/unet_base.yaml augmentation section, P3: do not vary by
     bracket). Geometric ops (flip/rotate/affine) move image AND mask together;
-    ColorJitter/Normalize are image-only in albumentations by design."""
+    ColorJitter/Normalize are image-only in albumentations by design.
+    `seed` makes this Compose's own RNG (and the child transforms it draws
+    augmentation params from) deterministic — closes the reproducibility gap
+    from Phase 3/decisions.md: previously only random/np.random/torch were
+    seeded, not albumentations' own generator."""
     return A.Compose(
         [
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
             A.Rotate(limit=35, p=0.5),
-            A.Affine(scale=(0.85, 1.15), p=0.5),  # scale jitter, output size unchanged
+            A.Affine(scale=(0.85, 1.15), p=0.5),
             A.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.05, p=0.5),
             A.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
             ToTensorV2(),
-        ]
+        ],
+        seed=seed,
     )
-
 
 def build_eval_transform() -> A.Compose:
     """No augmentation — used for validation and test-set inference/profiling."""
@@ -168,20 +173,19 @@ def evaluate_val_dice(model: nn.Module, val_loader: DataLoader, device: torch.de
 # Task 1.3 — Checkpointing
 # --------------------------------------------------------------------------- #
 
-def save_checkpoint(path: Path, model, optimizer, epoch: int, best_val_dice: float, seed: int, bracket: str) -> None:
+def save_checkpoint(path: Path, model, optimizer, step: int, best_val_dice: float, seed: int, bracket: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(
         {
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
-            "epoch": epoch,
+            "step": step,
             "best_val_dice": best_val_dice,
             "seed": seed,
             "bracket": bracket,
         },
         path,
     )
-
 
 def load_checkpoint(path: Path, model, optimizer=None, map_location=None) -> dict:
     ckpt = torch.load(path, map_location=map_location)
@@ -224,17 +228,12 @@ def main():
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--config", default=str(REPO_ROOT / "configs" / "unet_base.yaml"))
     parser.add_argument(
-        "--max-epochs", type=int, default=100,
-        help="Safety cap on epochs. configs/unet_base.yaml's training.max_iterations "
-             "is still an open TODO (decisions.md) — this flag lets you run/observe "
-             "before that number is fixed (Week 2 Task 2).",
+        "--total-steps", type=int, default=None,
+        help="Total training steps. Defaults to configs/unet_base.yaml's training.total_steps.",
     )
     parser.add_argument(
-        "--patience", type=int, default=10,
-        help="Early-stopping patience in epochs with no val-Dice improvement. "
-             "configs/unet_base.yaml's training.patience is still null (open TODO) — "
-             "10 is a common default; confirm/change it and log your choice in "
-             "decisions.md yourself (Task 1.2 asks you to 'pick and document N').",
+        "--val-every-steps", type=int, default=None,
+        help="Validate every N steps. Defaults to configs/unet_base.yaml's training.val_every_steps.",
     )
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--device", default=None)
@@ -244,7 +243,7 @@ def main():
     )
     parser.add_argument(
         "--profile-csv", default=None,
-        help="Defaults to results/unet_compute_profile_<bracket>_seed<seed>.csv "
+        help="Defaults to results/compute_profiles/unet_compute_profile_<tag><bracket>_seed<seed>.csv "
              "(one file per run — see module docstring on why it's not a single "
              "shared file: ComputeProfiler.write_csv() overwrites, it doesn't append).",
     )
@@ -253,12 +252,23 @@ def main():
         help="Skip the Task 4.2 test-set inference profiling pass (training-time "
              "profiling from Task 4.1 always runs). Useful for a fast debug run.",
     )
+    parser.add_argument(
+        "--run-tag", default="",
+        help="Prefix for checkpoint/log/profile filenames (e.g. 'v2_'), so this "
+             "scheme's runs can't collide with the old grid's artifacts under the "
+             "same (bracket, seed) and get silently skipped by the resume check.",
+    )
     args = parser.parse_args()
 
     set_seed(args.seed)  # Task 1.4 — before anything else touches randomness
 
     with open(args.config) as f:
         cfg = yaml.safe_load(f)
+
+    total_steps = args.total_steps if args.total_steps is not None else cfg["training"]["total_steps"]
+    val_every = args.val_every_steps if args.val_every_steps is not None else cfg["training"]["val_every_steps"]
+    window = cfg["training"]["selection_window"]
+    warmup_steps = int(cfg["training"]["warmup_pct"] * total_steps)
 
     if torch.cuda.is_available():
         device = torch.device("cuda")
@@ -280,11 +290,15 @@ def main():
 
     resize = tuple(cfg["input"]["resize"])
 
-    train_dataset = KvasirSegDataset(str(data_root), str(train_split), resize=resize, transform=build_train_transform())
+    train_dataset = KvasirSegDataset(str(data_root), str(train_split), resize=resize,
+                                      transform=build_train_transform(args.seed))
     val_dataset = KvasirSegDataset(str(data_root), str(val_split), resize=resize, transform=build_eval_transform())
 
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
-                               collate_fn=collate_kvasir_samples)
+    train_loader = DataLoader(
+        train_dataset, batch_size=args.batch_size, shuffle=True,
+        collate_fn=collate_kvasir_samples,
+        generator=torch.Generator().manual_seed(args.seed),
+    )
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False,
                              collate_fn=collate_kvasir_samples)
 
@@ -292,12 +306,20 @@ def main():
                  base_channels=cfg["model"]["base_channels"], depth=cfg["model"]["depth"]).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg["training"]["lr"])
 
-    run_name = f"{args.bracket}_seed{args.seed}"
+    def lr_lambda(step):
+        if step < warmup_steps:
+            return step / max(1, warmup_steps)
+        progress = (step - warmup_steps) / max(1, total_steps - warmup_steps)
+        return 0.5 * (1 + math.cos(math.pi * progress))
+
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+
+    run_name = f"{args.run_tag}{args.bracket}_seed{args.seed}"
     checkpoints_dir = REPO_ROOT / "checkpoints"
     best_ckpt_path = checkpoints_dir / f"unet_{run_name}_best.pt"
     last_ckpt_path = checkpoints_dir / f"unet_{run_name}_last.pt"
 
-    profile_csv = args.profile_csv or str(REPO_ROOT / "results" / f"unet_compute_profile_{run_name}.csv")
+    profile_csv = args.profile_csv or str(REPO_ROOT / "results" / "compute_profiles" / f"unet_compute_profile_{run_name}.csv")
 
     # Task 4.1 — trainable parameter count, via Sebastian's count_params() so the
     # number is computed identically on both arms (same function, same definition
@@ -307,70 +329,72 @@ def main():
 
     profiler = ComputeProfiler(arm="unet", device=str(device), param_counts=param_counts)
 
-    best_val_dice = -1.0
-    epochs_without_improvement = 0
-    history = []
+    val_history = []          # list of (step, val_dice)
+    best_moving_avg = -1.0
+    running_loss = 0.0
+    n_batches_since_val = 0
+    train_iter = iter(train_loader)
 
     print(f"Run: bracket={args.bracket} seed={args.seed} device={device} "
-          f"train_images={len(train_dataset)} val_images={len(val_dataset)}")
+          f"train_images={len(train_dataset)} val_images={len(val_dataset)} "
+          f"total_steps={total_steps} val_every={val_every}")
 
     # Task 4.1 — wrap the WHOLE training run in one profiler call: total
     # wall-clock + peak memory for the run, not per-epoch (profiler.measure()
     # resets CUDA's peak-memory counter on entry and reads it back on exit, so
     # this is a true peak-over-the-whole-run number on CUDA; on CPU/MPS it's the
     # process-lifetime peak RSS — see src/profiling.py's own docstring caveat).
-    with profiler.measure(run_id=f"train_{run_name}", image_id="all_epochs"):
-        for epoch in range(1, args.max_epochs + 1):
-            t0 = time.perf_counter()
+    with profiler.measure(run_id=f"train_{run_name}", image_id="all_steps"):
+        t0 = time.perf_counter()
+        for step in range(1, total_steps + 1):
             model.train()
-            running_loss = 0.0
-            n_batches = 0
+            try:
+                batch = next(train_iter)
+            except StopIteration:
+                train_iter = iter(train_loader)
+                batch = next(train_iter)
+            images = batch["image"].to(device)
+            targets = batch["mask"].unsqueeze(1).float().to(device)
 
-            for batch in train_loader:
-                images = batch["image"].to(device)
-                targets = batch["mask"].unsqueeze(1).float().to(device)
+            optimizer.zero_grad()
+            logits = model(images)
+            loss = combined_loss(logits, targets)
+            loss.backward()
+            optimizer.step()
+            scheduler.step()
 
-                optimizer.zero_grad()
-                logits = model(images)
-                loss = combined_loss(logits, targets)
-                loss.backward()
-                optimizer.step()
+            running_loss += loss.item()
+            n_batches_since_val += 1
 
-                running_loss += loss.item()
-                n_batches += 1
+            if step % val_every == 0:
+                train_loss = running_loss / n_batches_since_val
+                val_dice = evaluate_val_dice(model, val_loader, device)
+                val_history.append((step, val_dice))
+                moving_avg = float(np.mean([d for _, d in val_history[-window:]]))
+                interval_time = time.perf_counter() - t0
 
-            train_loss = running_loss / n_batches
-            val_dice = evaluate_val_dice(model, val_loader, device)
-            epoch_time = time.perf_counter() - t0
-            history.append({"epoch": epoch, "train_loss": train_loss, "val_dice": val_dice, "time_s": epoch_time})
+                improved = moving_avg > best_moving_avg
+                if improved:
+                    best_moving_avg = moving_avg
+                    save_checkpoint(best_ckpt_path, model, optimizer, step, best_moving_avg, args.seed, args.bracket)
+                save_checkpoint(last_ckpt_path, model, optimizer, step, best_moving_avg, args.seed, args.bracket)
 
-            improved = val_dice > best_val_dice
-            if improved:
-                best_val_dice = val_dice
-                epochs_without_improvement = 0
-                save_checkpoint(best_ckpt_path, model, optimizer, epoch, best_val_dice, args.seed, args.bracket)
-            else:
-                epochs_without_improvement += 1
+                marker = "*" if improved else " "
+                print(f"Step {step:5d}/{total_steps}  train_loss={train_loss:.4f}  "
+                      f"val_dice={val_dice:.4f}  moving_avg({window})={moving_avg:.4f}{marker}  "
+                      f"best_avg={best_moving_avg:.4f}  lr={scheduler.get_last_lr()[0]:.2e}  "
+                      f"time={interval_time:.1f}s")
 
-            # Always overwrite the "last" checkpoint too — a resume-from-crash safety
-            # net for Colab disconnects (Task 1.3), separate from the best-so-far one.
-            save_checkpoint(last_ckpt_path, model, optimizer, epoch, best_val_dice, args.seed, args.bracket)
-
-            marker = "*" if improved else " "
-            print(f"Epoch {epoch:3d}/{args.max_epochs}  train_loss={train_loss:.4f}  "
-                  f"val_dice={val_dice:.4f}{marker}  best={best_val_dice:.4f}  "
-                  f"no_improve={epochs_without_improvement}  time={epoch_time:.1f}s")
-
-            if epochs_without_improvement >= args.patience:
-                print(f"Early stopping: no val_dice improvement for {args.patience} epochs.")
-                break
+                running_loss = 0.0
+                n_batches_since_val = 0
+                t0 = time.perf_counter()
 
     # profiler.records has exactly one row at this point (the "train_..." row
     # from the `with` block just above) — read it directly rather than via
     # profiler.summary(), which aggregates ALL records and would silently
     # include the per-image inference rows too once those are added below.
     train_record = profiler.records[-1]
-    print(f"\nDone. Best val_dice={best_val_dice:.4f} -> {best_ckpt_path.relative_to(REPO_ROOT)}")
+    print(f"\nDone. Best moving-avg val_dice={best_moving_avg:.4f} -> {best_ckpt_path.relative_to(REPO_ROOT)}")
     print(f"Training profile: total_wall_clock_s={train_record.latency_ms / 1000:.1f}  "
           f"peak_mem_mb={train_record.peak_mem_mb:.1f}  "
           f"(device={device}; see src/profiling.py docstring for the CPU/MPS peak-memory caveat)")
@@ -396,7 +420,7 @@ def main():
     print(f"Wrote compute profile to {Path(profile_csv).relative_to(REPO_ROOT)} "
           f"(this run only — see module docstring: write_csv() does not append).")
 
-    return history, best_val_dice
+    return val_history, best_moving_avg
 
 
 if __name__ == "__main__":

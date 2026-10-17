@@ -17,12 +17,12 @@ training:
   loss: dice_bce
   optimizer: adam
   lr: 0.001
-  lr_schedule: cosine             # or "plateau" — pick one and keep it fixed across brackets
-  budget_mode: max_iterations     # TODO (decisions.md): confirm epochs vs. iterations
-  max_iterations: null            # TODO: set once decided
-  early_stopping_metric: val_dice
-  patience: null                  # TODO: set once decided
-  seeds: [0, 1, 2]                # 3 seeds per bracket -> 12 runs total
+  lr_schedule: cosine
+  warmup_pct: 0.05
+  total_steps: 8800        # == old 100-epoch cap for the 100pct bracket (88 steps/epoch x 100)
+  val_every_steps: 88      # => exactly 100 validation checkpoints for every bracket
+  selection_window: 3      # moving-average window, in validation checkpoints
+  seeds: [0, 1, 2]
 
 augmentation:
   # Identical across all brackets (P3) — do not vary by bracket.
