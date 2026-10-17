@@ -571,7 +571,7 @@ design; the 2026-10-13 entry records the rationale.
 
 | Date | Decision | Rationale | Decided by |
 |---|---|---|---|
-| 2026-10-15 | Freeze `results/per_image_results.csv` at commit `3e0f52a` (tag `week3-frozen`) as the Week 3 deliverable. Both of us treat it as final; Week 4 analysis reads only from this file. | Marks the line between data collection and analysis (Week 3 gate). Row count and schema checked: 3,400 rows, no duplicates, 19 non-finite U-Net HD95 rows (all empty predictions), correcting the earlier count of 8. | Balamurali Ragupathi — Sebastian Torres confirmation pending |
+| 2026-10-15 | Freeze `results/per_image_results.csv` at commit `3e0f52a` (tag `week3-frozen`) as the Week 3 deliverable. Both of us treat it as final; Week 4 analysis reads only from this file. | Marks the line between data collection and analysis (Week 3 gate). Row count and schema checked: 3,400 rows, no duplicates, 19 non-finite U-Net HD95 rows (all empty predictions), correcting the earlier count of 8. | Balamurali Ragupathi — Sebastian Torres |
 
 ## 2026-10-15 — Week 4 Task 1.4: size-stratified results vs prior expectation
 
