@@ -663,3 +663,33 @@ be decided; until then report both versions and keep the exclusion counts next t
 |---|---|---|---|
 | 2026-10-20 | Report the Task 1.4 finding as tentative and name the SAM 3 strategy (box-gt, box-j10, pt-3) in every statement; do not use seed std as a significance yardstick. | Large-polyp sign is prompt-dependent; significance needs paired tests. | Balamurali Ragupathi — pending Sebastian Torres sign-off |
 
+## 2026-10-20 — Task 1.2 results: boundary-contrast tertiles (H2)
+
+**Result (descriptive, ~67 images per tertile, no paired tests yet).** H2 predicts SAM 3's Boundary IoU
+advantage over U-Net is smaller at low contrast. We do not see this. SAM 3 minus U-Net Boundary IoU,
+"high minus low" contrast tertile (vs U-Net 10/25/50/100%): box-gt -0.031/-0.017/-0.022/-0.006;
+box-j10 -0.051/-0.037/-0.042/-0.026; pt-3 -0.022/-0.008/-0.013/+0.003. Negative means SAM 3's lead is
+larger at low contrast, i.e. no support for H2 in the predicted direction. Differences are small.
+
+**Not robust.** With intensity-difference tertiles, box-gt and box-j10 keep the sign but pt-3 flips to
++0.023..+0.062. The direction depends on the SAM 3 prompt and on the contrast measure.
+
+**Validity concerns.** (1) Both arms score higher Boundary IoU in the low-contrast tertile (U-Net 100%:
+0.539 vs 0.473; box-gt: 0.633 vs 0.561), opposite to the premise that low contrast is harder, so the proxy
+may not capture boundary visibility alone. (2) Contrast is confounded with polyp size (rank correlation
+0.31; 39 large polyps in the high tertile vs 15 in the low). HD95 is in pixels and also scales with size.
+(3) Post-hoc check (image + GT only): 41/200 images have >=5% of the band within 3 px of near-black
+non-tissue pixels (7 have >=20%), mostly in the high tertile; masking them gives Spearman 0.98 with the
+primary score and 95% of images in the same tertile, so bins are barely affected. The primary definition
+is unchanged (it was fixed before results were examined).
+
+**HD95.** The 19 non-finite rows fall in the low (13) and medium (6) contrast tertiles, none in high, so
+exclusion flatters U-Net there. Exclude-vs-cap policy still open.
+
+**Status.** Report as "no support for H2 with this proxy; not robust; confounded with size". Paired
+bootstrap CIs + Wilcoxon per tertile (Sebastian's script, contrast-bin option) are needed before any
+stronger statement.
+
+| Date | Decision | Rationale | Decided by |
+|---|---|---|---|
+| 2026-10-20 | Report Task 1.2 as inconclusive for H2 (no support in the predicted direction; prompt- and proxy-dependent; confounded with size). Keep the pre-registered contrast definition unchanged; any variant is labelled post-hoc. | Differences are small, the sign flips across prompt/proxy, and the proxy fails a face-validity check. | Balamurali Ragupathi — pending Sebastian Torres sign-off |
