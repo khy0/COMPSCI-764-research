@@ -1,0 +1,8 @@
+csv: results/per_image_results.csv
+hd95 policy: {'mode': 'cap', 'n_inf_rows': 19, 'n_inf_by_condition': {('unet', '100pct_seed0'): 2, ('unet', '100pct_seed1'): 3, ('unet', '100pct_seed2'): 2, ('unet', '10pct_seed1'): 2, ('unet', '10pct_seed2'): 1, ('unet', '25pct_seed0'): 1, ('unet', '25pct_seed1'): 1, ('unet', '50pct_seed0'): 2, ('unet', '50pct_seed1'): 3, ('unet', '50pct_seed2'): 2}, 'cap_value': 601.465376}
+[dice] paired images: 200; conditions: ['sam3:box-gt', 'sam3:box-j10', 'sam3:box-j20', 'sam3:pt-1', 'sam3:pt-3', 'unet:10pct', 'unet:25pct', 'unet:50pct', 'unet:100pct']
+[iou] paired images: 200; conditions: ['sam3:box-gt', 'sam3:box-j10', 'sam3:box-j20', 'sam3:pt-1', 'sam3:pt-3', 'unet:10pct', 'unet:25pct', 'unet:50pct', 'unet:100pct']
+[boundary_iou] paired images: 200; conditions: ['sam3:box-gt', 'sam3:box-j10', 'sam3:box-j20', 'sam3:pt-1', 'sam3:pt-3', 'unet:10pct', 'unet:25pct', 'unet:50pct', 'unet:100pct']
+[hd95] paired images: 200; conditions: ['sam3:box-gt', 'sam3:box-j10', 'sam3:box-j20', 'sam3:pt-1', 'sam3:pt-3', 'unet:10pct', 'unet:25pct', 'unet:50pct', 'unet:100pct']
+[precision] paired images: 200; conditions: ['sam3:box-gt', 'sam3:box-j10', 'sam3:box-j20', 'sam3:pt-1', 'sam3:pt-3', 'unet:10pct', 'unet:25pct', 'unet:50pct', 'unet:100pct']
+[recall] paired images: 200; conditions: ['sam3:box-gt', 'sam3:box-j10', 'sam3:box-j20', 'sam3:pt-1', 'sam3:pt-3', 'unet:10pct', 'unet:25pct', 'unet:50pct', 'unet:100pct']
