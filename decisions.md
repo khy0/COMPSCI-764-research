@@ -600,3 +600,66 @@ training examples; to be checked in the Task 3 worst-case inspection.
 | Date | Decision | Rationale | Decided by |
 |---|---|---|---|
 | 2026-10-15 | Report Task 1.4 as a contradicted prior: SAM 3's lead is largest on small polyps and shrinks with size, not the reverse. Present it as a finding, with oracle-prompt and small-n caveats. | Gap tables (SAM 3 minus U-Net) for box-gt and pt-1 show a consistent negative "large minus small" in Dice and Boundary IoU, well above seed std. | Balamurali Ragupathi |
+
+## 2026-10-20 — Task 1.2: boundary-contrast definition (fixed before results were examined)
+
+**Agreed with Sebastian by email (2026-10-20):** grayscale image, Sobel gradient magnitude, mean inside a
+band of +/-2% of the image diagonal around the GT contour, tertile bins. His additions are adopted:
+(1) normalise for resolution before Sobel, (2) inside-vs-outside intensity difference as a sensitivity
+check, (3) definition fixed before looking at results, cutoffs from image + GT only (never predictions),
+(4) cross-tab contrast against polyp size.
+
+**Definition (implemented in `notebooks/08_week4_contrast_stratified_tables.ipynb`, Part A):**
+- Input: grayscale image and GT mask of each of the 200 test images. No predictions are used to build the bins.
+- Normalisation: resize image and mask (aspect preserved) so the diagonal is 640 px (about the smallest
+  test-image diagonal, 641 px, so nothing is upscaled; test diagonals range 641-1721 px).
+- Gradient: Sobel (3x3) magnitude on the normalised grayscale image.
+- Band: pixels within 13 px (2% of 640) of the GT contour, inside and outside (Euclidean distance).
+- Score: mean gradient magnitude over the band, one value per image. Bins: tertiles of the 200 images
+  (low/medium/high; 67/66/67 images; cutoffs 34.59 and 45.90).
+- Sensitivity: |mean intensity inside band - mean intensity outside band|, binned the same way.
+
+**Diagnostics computed from image + GT only:** changing the target diagonal to 400 or 900 px keeps the
+rank order (Spearman 0.98 / 0.99) and 89% / 95% of images in the same tertile. The intensity-difference
+measure agrees only weakly with the gradient measure (Spearman 0.36, 43% same tertile), so it is a
+different construct and both are reported. Contrast and polyp size are positively correlated
+(Spearman 0.31): the high-contrast tertile contains 39 large and 9 small polyps, the low-contrast tertile
+15 large and 18 small, so any H2 reading must account for size.
+
+**Open:** target diagonal (640 px) to be confirmed with Sebastian; his stats script needs a contrast-bin
+option so the paired tests use identical machinery.
+
+| Date | Decision | Rationale | Decided by |
+|---|---|---|---|
+| 2026-10-20 | Contrast bins: gradient-based tertiles as defined above (640 px normalised diagonal, 13 px band); intensity difference reported as a sensitivity check. Definition frozen before any result metric was joined. | Tests H2 (low-contrast boundary degradation) with our own data. Fixing the definition first prevents tuning it to the outcome. | Balamurali Ragupathi + Sebastian Torres (email 2026-10-20); 640 px value pending confirmation |
+
+## 2026-10-20 — Task 1.4 amendment (supersedes the wording of the 2026-10-15 entry)
+
+Following Sebastian's review (email 2026-10-20). The 2026-10-15 entry is kept above for the record.
+
+**Wording.** "Prior contradicted" is now **tentative**. Descriptive finding: SAM 3's advantage over U-Net is
+largest on small polyps and shrinks as polyps get larger, for box-gt, box-j10 and pt-3 alike. The sign on
+large polyps depends on the prompt. Dice, SAM 3 minus U-Net (positive = SAM 3 ahead):
+
+| Strategy | Small (vs U-Net 10% / 100%) | Medium | Large |
+|---|---|---|---|
+| box-gt (oracle) | +0.355 / +0.218 | +0.093 / +0.036 | +0.048 / -0.022 |
+| box-j10 | +0.351 / +0.215 | +0.066 / +0.009 | -0.044 / -0.114 |
+| pt-3 | +0.281 / +0.144 | +0.068 / +0.011 | +0.037 / -0.033 |
+
+On large polyps, box-gt and pt-3 cross over between the 25% and 50% brackets; box-j10 is behind U-Net at
+every bracket. The earlier "pt-1" comparison is replaced by pt-3.
+
+**Evidence standard.** Seed std is descriptive only and is no longer cited as evidence that gaps exceed
+noise. The test is a paired comparison per bin (bootstrap CI + Wilcoxon over images) with Sebastian's script
+(size-bin option); pending. The small bin has only 39 images, so its intervals will be wide.
+
+**HD95.** All 19 non-finite HD95 rows are U-Net empty predictions (Dice = 0), none SAM 3, and all fall in the
+small bin (3 / 2 / 7 / 7 for the 10 / 25 / 50 / 100% brackets). Excluding them flatters U-Net on small
+polyps, so SAM 3's small-polyp HD95 advantage is probably understated. Exclude-vs-cap policy is still to
+be decided; until then report both versions and keep the exclusion counts next to every HD95 number.
+
+| Date | Decision | Rationale | Decided by |
+|---|---|---|---|
+| 2026-10-20 | Report the Task 1.4 finding as tentative and name the SAM 3 strategy (box-gt, box-j10, pt-3) in every statement; do not use seed std as a significance yardstick. | Large-polyp sign is prompt-dependent; significance needs paired tests. | Balamurali Ragupathi — pending Sebastian Torres sign-off |
+
