@@ -1,0 +1,65 @@
+# Week 4 analysis configuration (owner: Sebastian). Consumed by
+# src/stats_analysis.py, make_headline_figure.py, select_qualitative_cases.py.
+# Statistics settings that belong to the shared protocol (n resamples, CI level)
+# are read from configs/eval.yaml -> statistics; only analysis-specific choices live here.
+
+input:
+  per_image_csv: results/per_image_results.csv
+
+metrics:
+  # direction: +1 higher is better, -1 lower is better
+  dice:         {direction: 1,  summary: mean,   label: "Dice"}
+  iou:          {direction: 1,  summary: mean,   label: "IoU"}
+  boundary_iou: {direction: 1,  summary: mean,   label: "Boundary IoU"}
+  hd95:         {direction: -1, summary: median, label: "HD95 (px, median)"}
+  precision:    {direction: 1,  summary: mean,   label: "Precision"}
+  recall:       {direction: 1,  summary: mean,   label: "Recall"}
+
+# Metrics used for the headline figure / crossover (H1 = dice, H2 = boundary_iou).
+primary_metrics: [dice, boundary_iou, hd95]
+
+unet:
+  # bracket name -> number of training images (x-axis of the crossover curve)
+  brackets: {10pct: 70, 25pct: 175, 50pct: 350, 100pct: 700}
+  # run_id pattern: "<bracket>_seed<k>" (also accepts "-seed")
+
+sam3:
+  # Reference strategy for the headline claim (oracle) and the realistic one.
+  reference_strategy: box-gt
+  strategies: [box-gt, box-j10, box-j20, pt-1, pt-3]
+
+hd95_inf_policy:
+  # DECISION PENDING (decisions.md): what to do with inf HD95 (empty prediction).
+  #   cap     -> replace inf with `cap_value` (or max finite HD95 in the data if null)
+  #   exclude -> drop any image that has an inf in ANY compared condition (listwise),
+  #              n dropped is always reported
+  mode: cap
+  cap_value: null
+
+bootstrap:
+  seed: 20260101
+  # "two_stage" resamples images AND seeds (U-Net) -> honest CI when seed variance is large.
+  # "image" resamples images only (what the planning doc literally says) and is also
+  # always reported alongside, as ci_image_*.
+  primary: two_stage
+
+wilcoxon:
+  alternative: two-sided
+  zero_method: wilcox
+  # Family for multiple-comparison adjustment: all U-Net-bracket x SAM3-strategy tests
+  # within one metric. Both Holm and Bonferroni columns are always written; the paper
+  # picks which one to quote once statistics.multiple_comparisons is decided.
+  family: per_metric
+
+crossover:
+  # Crossover = smallest n at which the U-Net curve reaches the SAM3 reference
+  # (direction-aware), log-linear interpolation in log(n) between brackets.
+  # Censored: "<70" if already at/above at the smallest bracket, ">700" if never.
+  interpolation: log_linear
+
+qualitative:
+  n_cases: 8
+  # Case-selection rule (deterministic, reproducible): see select_qualitative_cases.py
+  ref_unet_bracket: 100pct
+  small_cut_pct: 5
+  seed: 7
