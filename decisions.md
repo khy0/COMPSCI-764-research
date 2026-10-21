@@ -705,3 +705,7 @@ Basis: 19 non-finite rows, all U-Net, from 5 unique images, all small polyps. Ex
 Sensitivity: results are also recomputed with those 5 images excluded (listwise) and reported alongside.
 Delegated by Sebastian by email on 2026-10-21 ("I trust your judgement for you to finish the analysis part").
 
+## 2026-10-21 — Task 3 worst-case inspection
+
+Inspected the 10 lowest-Dice test images for SAM 3 (box-gt, box-j10, pt-3) and the U-Net (10 %, 100 %); U-Net ranked by seed-mean Dice. Outputs: `notebooks/09_week4_worst_case_inspection.ipynb`, `results/week4/worst10_*`. Main pattern: SAM 3's box failures are large, low-contrast polyps; the U-Net's failures are small polyps (8 of 10 at both brackets). Failure-type tags are fixed-rule descriptive labels, not tests. Open: confirm with Sebastian how SAM 3's mask was selected when it returns several (box-gt rank 1 to 4 return wall-like regions).
+
