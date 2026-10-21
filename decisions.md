@@ -693,3 +693,8 @@ stronger statement.
 | Date | Decision | Rationale | Decided by |
 |---|---|---|---|
 | 2026-10-20 | Report Task 1.2 as inconclusive for H2 (no support in the predicted direction; prompt- and proxy-dependent; confounded with size). Keep the pre-registered contrast definition unchanged; any variant is labelled post-hoc. | Differences are small, the sign flips across prompt/proxy, and the proxy fails a face-validity check. | Balamurali Ragupathi — pending Sebastian Torres sign-off |
+
+## 2026-10-21 — SAM 3 prediction masks validated
+
+Received `sam3_preds` (5 prompt folders) from Sebastian. Checks: 200 PNGs per folder, names match `data/splits/test.txt`, masks binary (0/255) at native resolution, and per-image Dice recomputed from the masks matches `results/per_image_results.csv` (max |diff| 5.0e-07, 0 images above 1e-3). Masks stored at `results/sam3_preds/` (gitignored).
+
