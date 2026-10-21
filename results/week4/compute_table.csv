@@ -1,0 +1,10 @@
+arm,hardware,params (M),train images,"train time, min (mean±sd over 3 seeds)",infer ms/image (mean ± sd),infer ms/image (median),"peak mem, MB (process)"
+U-Net 10%,"Mac mini, Apple M4, 16 GB (mps)",7.763041,70,52.8 ± 0.3,2.70 ± 8.05,2.08,610.0
+U-Net 25%,"Mac mini, Apple M4, 16 GB (mps)",7.763041,175,54.6 ± 0.3,2.65 ± 8.10,2.01,634.0
+U-Net 50%,"Mac mini, Apple M4, 16 GB (mps)",7.763041,350,56.1 ± 0.2,2.96 ± 9.50,2.23,603.0
+U-Net 100%,"Mac mini, Apple M4, 16 GB (mps)",7.763041,700,56.8 ± 0.6,2.77 ± 8.21,2.13,556.0
+SAM 3 box-gt,"MacBook Pro, Apple M3 (mps)",860.055224,0,none (zero-shot),21195 ± 6218,20276.0,1131.0
+SAM 3 box-j10,"MacBook Pro, Apple M3 (mps)",860.055224,0,none (zero-shot),20819 ± 6246,19915.0,1131.0
+SAM 3 box-j20,"MacBook Pro, Apple M3 (mps)",860.055224,0,none (zero-shot),20816 ± 6247,19906.0,1131.0
+SAM 3 pt-1,"MacBook Pro, Apple M3 (mps)",860.055224,0,none (zero-shot),20867 ± 6248,19975.0,1131.0
+SAM 3 pt-3,"MacBook Pro, Apple M3 (mps)",860.055224,0,none (zero-shot),20862 ± 6251,19954.0,1131.0
