@@ -1,0 +1,10 @@
+condition,small,medium,large
+unet-10%,3,0,0
+unet-25%,2,0,0
+unet-50%,7,0,0
+unet-100%,7,0,0
+sam3-box-gt,0,0,0
+sam3-box-j10,0,0,0
+sam3-box-j20,0,0,0
+sam3-pt-1,0,0,0
+sam3-pt-3,0,0,0

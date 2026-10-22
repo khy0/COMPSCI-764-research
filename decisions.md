@@ -571,4 +571,151 @@ design; the 2026-10-13 entry records the rationale.
 
 | Date | Decision | Rationale | Decided by |
 |---|---|---|---|
-| 2026-10-15 | Freeze `results/per_image_results.csv` at commit `3e0f52a` (tag `week3-frozen`) as the Week 3 deliverable. Both of us treat it as final; Week 4 analysis reads only from this file. | Marks the line between data collection and analysis (Week 3 gate). Row count and schema checked: 3,400 rows, no duplicates, 19 non-finite U-Net HD95 rows (all empty predictions), correcting the earlier count of 8. | Balamurali Ragupathi — Sebastian Torres confirmation pending |
+| 2026-10-15 | Freeze `results/per_image_results.csv` at commit `3e0f52a` (tag `week3-frozen`) as the Week 3 deliverable. Both of us treat it as final; Week 4 analysis reads only from this file. | Marks the line between data collection and analysis (Week 3 gate). Row count and schema checked: 3,400 rows, no duplicates, 19 non-finite U-Net HD95 rows (all empty predictions), correcting the earlier count of 8. | Balamurali Ragupathi — Sebastian Torres |
+
+## 2026-10-15 — Week 4 Task 1.4: size-stratified results vs prior expectation
+
+**Verdict: prior expectation contradicted.** The planning doc predicted SAM 3 would do
+relatively better on large, well-defined polyps. In `results/week4/size_stratified_summary.csv`
+the opposite holds: SAM 3's advantage over U-Net is largest on small polyps and shrinks
+monotonically with polyp size. With the oracle box prompt, the Dice gap against U-Net-100%
+is +0.218 on small, +0.036 on medium and −0.022 on large polyps; Boundary IoU and HD95 show
+the same direction. U-Net overtakes SAM 3 first on large polyps (box-gt Dice crossover
+between 25% and 50% data), and SAM 3 stays ahead on small polyps at every bracket.
+
+**Strength of evidence.** The size effect ("large minus small" gap of −0.14 to −0.31 Dice) is
+far larger than the U-Net seed std (0.002–0.027). Individual near-zero cells, for example
+large/box-gt at 25% and 50% (+0.015, −0.003), are within seed spread and should be read as
+ties. The small bin has only 39 images. Values are descriptive means; bootstrap CIs and
+Wilcoxon tests are still pending (Sebastian).
+
+**Caveats.** (1) box-gt is an oracle prompt (SAM 3 upper bound), so the small-polyp advantage
+may largely reflect SAM 3 being told where the polyp is; the same pattern holds with the
+weaker pt-1 prompt, though with smaller gaps. (2) All 19 non-finite HD95 rows are U-Net
+empty predictions on small polyps (hd95_excluded_by_bin.csv), so U-Net's small-bin HD95 mean
+is flattered and SAM 3's HD95 advantage there is probably understated. (3) Possible
+explanations (untested): U-Net's 256x256 input loses detail on small polyps and has few small
+training examples; to be checked in the Task 3 worst-case inspection.
+
+| Date | Decision | Rationale | Decided by |
+|---|---|---|---|
+| 2026-10-15 | Report Task 1.4 as a contradicted prior: SAM 3's lead is largest on small polyps and shrinks with size, not the reverse. Present it as a finding, with oracle-prompt and small-n caveats. | Gap tables (SAM 3 minus U-Net) for box-gt and pt-1 show a consistent negative "large minus small" in Dice and Boundary IoU, well above seed std. | Balamurali Ragupathi |
+
+## 2026-10-20 — Task 1.2: boundary-contrast definition (fixed before results were examined)
+
+**Agreed with Sebastian by email (2026-10-20):** grayscale image, Sobel gradient magnitude, mean inside a
+band of +/-2% of the image diagonal around the GT contour, tertile bins. His additions are adopted:
+(1) normalise for resolution before Sobel, (2) inside-vs-outside intensity difference as a sensitivity
+check, (3) definition fixed before looking at results, cutoffs from image + GT only (never predictions),
+(4) cross-tab contrast against polyp size.
+
+**Definition (implemented in `notebooks/08_week4_contrast_stratified_tables.ipynb`, Part A):**
+- Input: grayscale image and GT mask of each of the 200 test images. No predictions are used to build the bins.
+- Normalisation: resize image and mask (aspect preserved) so the diagonal is 640 px (about the smallest
+  test-image diagonal, 641 px, so nothing is upscaled; test diagonals range 641-1721 px).
+- Gradient: Sobel (3x3) magnitude on the normalised grayscale image.
+- Band: pixels within 13 px (2% of 640) of the GT contour, inside and outside (Euclidean distance).
+- Score: mean gradient magnitude over the band, one value per image. Bins: tertiles of the 200 images
+  (low/medium/high; 67/66/67 images; cutoffs 34.59 and 45.90).
+- Sensitivity: |mean intensity inside band - mean intensity outside band|, binned the same way.
+
+**Diagnostics computed from image + GT only:** changing the target diagonal to 400 or 900 px keeps the
+rank order (Spearman 0.98 / 0.99) and 89% / 95% of images in the same tertile. The intensity-difference
+measure agrees only weakly with the gradient measure (Spearman 0.36, 43% same tertile), so it is a
+different construct and both are reported. Contrast and polyp size are positively correlated
+(Spearman 0.31): the high-contrast tertile contains 39 large and 9 small polyps, the low-contrast tertile
+15 large and 18 small, so any H2 reading must account for size.
+
+**Open:** target diagonal (640 px) to be confirmed with Sebastian; his stats script needs a contrast-bin
+option so the paired tests use identical machinery.
+
+| Date | Decision | Rationale | Decided by |
+|---|---|---|---|
+| 2026-10-20 | Contrast bins: gradient-based tertiles as defined above (640 px normalised diagonal, 13 px band); intensity difference reported as a sensitivity check. Definition frozen before any result metric was joined. | Tests H2 (low-contrast boundary degradation) with our own data. Fixing the definition first prevents tuning it to the outcome. | Balamurali Ragupathi + Sebastian Torres (email 2026-10-20); 640 px value pending confirmation |
+
+## 2026-10-20 — Task 1.4 amendment (supersedes the wording of the 2026-10-15 entry)
+
+Following Sebastian's review (email 2026-10-20). The 2026-10-15 entry is kept above for the record.
+
+**Wording.** "Prior contradicted" is now **tentative**. Descriptive finding: SAM 3's advantage over U-Net is
+largest on small polyps and shrinks as polyps get larger, for box-gt, box-j10 and pt-3 alike. The sign on
+large polyps depends on the prompt. Dice, SAM 3 minus U-Net (positive = SAM 3 ahead):
+
+| Strategy | Small (vs U-Net 10% / 100%) | Medium | Large |
+|---|---|---|---|
+| box-gt (oracle) | +0.355 / +0.218 | +0.093 / +0.036 | +0.048 / -0.022 |
+| box-j10 | +0.351 / +0.215 | +0.066 / +0.009 | -0.044 / -0.114 |
+| pt-3 | +0.281 / +0.144 | +0.068 / +0.011 | +0.037 / -0.033 |
+
+On large polyps, box-gt and pt-3 cross over between the 25% and 50% brackets; box-j10 is behind U-Net at
+every bracket. The earlier "pt-1" comparison is replaced by pt-3.
+
+**Evidence standard.** Seed std is descriptive only and is no longer cited as evidence that gaps exceed
+noise. The test is a paired comparison per bin (bootstrap CI + Wilcoxon over images) with Sebastian's script
+(size-bin option); pending. The small bin has only 39 images, so its intervals will be wide.
+
+**HD95.** All 19 non-finite HD95 rows are U-Net empty predictions (Dice = 0), none SAM 3, and all fall in the
+small bin (3 / 2 / 7 / 7 for the 10 / 25 / 50 / 100% brackets). Excluding them flatters U-Net on small
+polyps, so SAM 3's small-polyp HD95 advantage is probably understated. Exclude-vs-cap policy is still to
+be decided; until then report both versions and keep the exclusion counts next to every HD95 number.
+
+| Date | Decision | Rationale | Decided by |
+|---|---|---|---|
+| 2026-10-20 | Report the Task 1.4 finding as tentative and name the SAM 3 strategy (box-gt, box-j10, pt-3) in every statement; do not use seed std as a significance yardstick. | Large-polyp sign is prompt-dependent; significance needs paired tests. | Balamurali Ragupathi — pending Sebastian Torres sign-off |
+
+## 2026-10-20 — Task 1.2 results: boundary-contrast tertiles (H2)
+
+**Result (descriptive, ~67 images per tertile, no paired tests yet).** H2 predicts SAM 3's Boundary IoU
+advantage over U-Net is smaller at low contrast. We do not see this. SAM 3 minus U-Net Boundary IoU,
+"high minus low" contrast tertile (vs U-Net 10/25/50/100%): box-gt -0.031/-0.017/-0.022/-0.006;
+box-j10 -0.051/-0.037/-0.042/-0.026; pt-3 -0.022/-0.008/-0.013/+0.003. Negative means SAM 3's lead is
+larger at low contrast, i.e. no support for H2 in the predicted direction. Differences are small.
+
+**Not robust.** With intensity-difference tertiles, box-gt and box-j10 keep the sign but pt-3 flips to
++0.023..+0.062. The direction depends on the SAM 3 prompt and on the contrast measure.
+
+**Validity concerns.** (1) Both arms score higher Boundary IoU in the low-contrast tertile (U-Net 100%:
+0.539 vs 0.473; box-gt: 0.633 vs 0.561), opposite to the premise that low contrast is harder, so the proxy
+may not capture boundary visibility alone. (2) Contrast is confounded with polyp size (rank correlation
+0.31; 39 large polyps in the high tertile vs 15 in the low). HD95 is in pixels and also scales with size.
+(3) Post-hoc check (image + GT only): 41/200 images have >=5% of the band within 3 px of near-black
+non-tissue pixels (7 have >=20%), mostly in the high tertile; masking them gives Spearman 0.98 with the
+primary score and 95% of images in the same tertile, so bins are barely affected. The primary definition
+is unchanged (it was fixed before results were examined).
+
+**HD95.** The 19 non-finite rows fall in the low (13) and medium (6) contrast tertiles, none in high, so
+exclusion flatters U-Net there. Exclude-vs-cap policy still open.
+
+**Status.** Report as "no support for H2 with this proxy; not robust; confounded with size". Paired
+bootstrap CIs + Wilcoxon per tertile (Sebastian's script, contrast-bin option) are needed before any
+stronger statement.
+
+| Date | Decision | Rationale | Decided by |
+|---|---|---|---|
+| 2026-10-20 | Report Task 1.2 as inconclusive for H2 (no support in the predicted direction; prompt- and proxy-dependent; confounded with size). Keep the pre-registered contrast definition unchanged; any variant is labelled post-hoc. | Differences are small, the sign flips across prompt/proxy, and the proxy fails a face-validity check. | Balamurali Ragupathi — pending Sebastian Torres sign-off |
+
+## 2026-10-21 — SAM 3 prediction masks validated
+
+Received `sam3_preds` (5 prompt folders) from Sebastian. Checks: 200 PNGs per folder, names match `data/splits/test.txt`, masks binary (0/255) at native resolution, and per-image Dice recomputed from the masks matches `results/per_image_results.csv` (max |diff| 5.0e-07, 0 images above 1e-3). Masks stored at `results/sam3_preds/` (gitignored).
+
+## 2026-10-21 — HD95 policy for empty predictions
+
+Decision: infinite HD95 (empty prediction) is capped, not excluded. Primary results use mode `cap` in `configs/analysis.yaml` with the cap equal to the maximum finite HD95 in `results/per_image_results.csv` (601.5 px). HD95 is summarised by the median, and Wilcoxon uses ranks, so any cap above the largest finite value gives identical results.
+Basis: 19 non-finite rows, all U-Net, from 5 unique images, all small polyps. Excluding them would remove the U-Net's complete failures and bias the comparison towards the U-Net on small polyps and low brackets.
+Sensitivity (run 22 Oct, `notebooks/11_week4_per_bin_significance.ipynb`, output `results/week4/hd95_sensitivity.csv`): dropping the 5 images with a non-finite HD95 (all small polyps) changes no sign and no raw p < 0.05 outcome across 24 comparisons (all images and small bin; 4 brackets x 3 prompts). Magnitudes in the small bin shrink somewhat.
+Delegated by Sebastian by email on 2026-10-21 ("I trust your judgement for you to finish the analysis part").
+
+## 2026-10-21 — Task 3 worst-case inspection
+
+Inspected the 10 lowest-Dice test images for SAM 3 (box-gt, box-j10, pt-3) and the U-Net (10 %, 100 %); U-Net ranked by seed-mean Dice. Outputs: `notebooks/09_week4_worst_case_inspection.ipynb`, `results/week4/worst10_*`. Main pattern: SAM 3's box failures are large, low-contrast polyps; the U-Net's failures are small polyps (8 of 10 at both brackets). Failure-type tags are fixed-rule descriptive labels, not tests. Open: confirm with Sebastian how SAM 3's mask was selected when it returns several (box-gt rank 1 to 4 return wall-like regions).
+
+## 2026-10-22 — Key claims, H2 reading, and multiple-comparison correction
+
+Key claims agreed with Sebastian (email 2026-10-22):
+1. The U-Net does not match SAM 3 with the oracle box (box-gt, Dice 0.894) or three clicks (pt-3, 0.865) within 700 images (">700", tested range only). It is already ahead of box-j20 at 70 images, matches box-j10 only at about 700 (CI 170 to >700; Dice 0.846 vs 0.846, Holm p = 0.27), and matches pt-1 at about 266 (CI 105 to >700). H1 is partly supported (3 of 5 prompts), not for the two strongest.
+2. Boundary-sensitive metrics need more data than region overlap; HD95 does not cross within 700.
+3. Compute is a trade-off: SAM 3 needs no masks but costs about 21 s per image (M3); the U-Net is cheaper after about 160 images, but only once about 700 masks exist. Excludes annotation; M3 vs M4 machines; MPS timings unsynchronised, so inference times are underestimates.
+
+H2: the planning document states the prediction (boundary crossover higher) and a reason that implies the opposite. We report the prediction as supported in direction and the stated mechanism as not supported.
+Multiple comparisons: Holm correction within each metric (Bonferroni also saved).
+
