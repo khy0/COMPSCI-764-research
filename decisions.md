@@ -709,3 +709,13 @@ Delegated by Sebastian by email on 2026-10-21 ("I trust your judgement for you t
 
 Inspected the 10 lowest-Dice test images for SAM 3 (box-gt, box-j10, pt-3) and the U-Net (10 %, 100 %); U-Net ranked by seed-mean Dice. Outputs: `notebooks/09_week4_worst_case_inspection.ipynb`, `results/week4/worst10_*`. Main pattern: SAM 3's box failures are large, low-contrast polyps; the U-Net's failures are small polyps (8 of 10 at both brackets). Failure-type tags are fixed-rule descriptive labels, not tests. Open: confirm with Sebastian how SAM 3's mask was selected when it returns several (box-gt rank 1 to 4 return wall-like regions).
 
+## 2026-10-22 — Key claims, H2 reading, and multiple-comparison correction
+
+Key claims agreed with Sebastian (email 2026-10-22):
+1. The U-Net does not match SAM 3 with the oracle box (box-gt, Dice 0.894) or three clicks (pt-3, 0.865) within 700 images (">700", tested range only). It is already ahead of box-j20 at 70 images, matches box-j10 only at about 700 (CI 170 to >700; Dice 0.846 vs 0.846, Holm p = 0.27), and matches pt-1 at about 266 (CI 105 to >700). H1 is partly supported (3 of 5 prompts), not for the two strongest.
+2. Boundary-sensitive metrics need more data than region overlap; HD95 does not cross within 700.
+3. Compute is a trade-off: SAM 3 needs no masks but costs about 21 s per image (M3); the U-Net is cheaper after about 160 images, but only once about 700 masks exist. Excludes annotation; M3 vs M4 machines; MPS timings unsynchronised, so inference times are underestimates.
+
+H2: the planning document states the prediction (boundary crossover higher) and a reason that implies the opposite. We report the prediction as supported in direction and the stated mechanism as not supported.
+Multiple comparisons: Holm correction within each metric (Bonferroni also saved).
+
