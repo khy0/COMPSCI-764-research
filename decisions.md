@@ -702,7 +702,7 @@ Received `sam3_preds` (5 prompt folders) from Sebastian. Checks: 200 PNGs per fo
 
 Decision: infinite HD95 (empty prediction) is capped, not excluded. Primary results use mode `cap` in `configs/analysis.yaml` with the cap equal to the maximum finite HD95 in `results/per_image_results.csv` (601.5 px). HD95 is summarised by the median, and Wilcoxon uses ranks, so any cap above the largest finite value gives identical results.
 Basis: 19 non-finite rows, all U-Net, from 5 unique images, all small polyps. Excluding them would remove the U-Net's complete failures and bias the comparison towards the U-Net on small polyps and low brackets.
-Sensitivity: results are also recomputed with those 5 images excluded (listwise) and reported alongside.
+Sensitivity (run 22 Oct, `notebooks/11_week4_per_bin_significance.ipynb`, output `results/week4/hd95_sensitivity.csv`): dropping the 5 images with a non-finite HD95 (all small polyps) changes no sign and no raw p < 0.05 outcome across 24 comparisons (all images and small bin; 4 brackets x 3 prompts). Magnitudes in the small bin shrink somewhat.
 Delegated by Sebastian by email on 2026-10-21 ("I trust your judgement for you to finish the analysis part").
 
 ## 2026-10-21 — Task 3 worst-case inspection
